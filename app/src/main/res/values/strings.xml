@@ -1,0 +1,6 @@
+<resources>
+    <string name="app_name">CuevanaTV</string>
+    <string name="intro_title">Bienvenido a CuevanaTV</string>
+    <string name="intro_body">Navega con las flechas del control. Pulsa OK para abrir y reproducir. Selecciona un servidor si hay varias opciones.</string>
+    <string name="intro_continue">Entrar</string>
+</resources>

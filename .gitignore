@@ -1,0 +1,26 @@
+# Android/Gradle
+.gradle/
+**/build/
+.idea/
+local.properties
+*.iml
+*.iws
+*.ipr
+*.jks
+*.keystore
+
+# Node/Vite admin panel
+admin-panel/node_modules/
+admin-panel/dist/
+admin-panel/.env
+
+# OS/Editors
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# Logs
+npm-debug.log*
+yarn-error.log*
+

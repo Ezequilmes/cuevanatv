@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CuevanaTV | El mejor Streaming para tu Smart TV</title>
+    <title>CuevanaTV | Streaming para Smart TV y Celulares</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;700;900&display=swap" rel="stylesheet">
@@ -12,7 +12,10 @@
             theme: {
                 extend: {
                     fontFamily: { sans: ['Outfit', 'sans-serif'] },
-                    colors: { netflix: '#E50914', netflixHover: '#b20710', whatsapp: '#25D366' }
+                    colors: { netflix: '#E50914', netflixHover: '#b20710', whatsapp: '#25D366' },
+                    animation: {
+                        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                    }
                 }
             }
         }
@@ -20,21 +23,24 @@
     <style>
         body { background-color: #050505; color: #cbd5e1; }
         .hero-bg {
-            background-image: linear-gradient(to bottom, rgba(5,5,5,0.4) 0%, rgba(5,5,5,1) 100%), url('https://images.unsplash.com/photo-1593784991095-a205069470b6?auto=format&fit=crop&q=80');
+            background-image: linear-gradient(to bottom, rgba(5,5,5,0.7) 0%, rgba(5,5,5,1) 100%), url('https://images.unsplash.com/photo-1593784991095-a205069470b6?auto=format&fit=crop&q=80');
             background-size: cover;
             background-position: center;
+            background-attachment: fixed;
         }
-        .float-anim { animation: float 3s ease-in-out infinite; }
+        .float-anim { animation: float 4s ease-in-out infinite; }
         @keyframes float {
             0% { transform: translateY(0px); }
-            50% { transform: translateY(-10px); }
+            50% { transform: translateY(-12px); }
             100% { transform: translateY(0px); }
         }
-        .glow-box { box-shadow: 0 0 50px rgba(229, 9, 20, 0.2); }
-        .step-card { transition: all 0.3s ease; }
-        .step-card:hover { border-color: #E50914; transform: translateY(-5px); background-color: rgba(229, 9, 20, 0.05); }
+        .glow-box { box-shadow: 0 0 60px rgba(229, 9, 20, 0.25); }
+        .glow-text { text-shadow: 0 0 20px rgba(229, 9, 20, 0.5); }
+        .feature-card { transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
+        .feature-card:hover { border-color: #E50914; transform: translateY(-8px); background-color: rgba(229, 9, 20, 0.08); box-shadow: 0 10px 30px -10px rgba(229,9,20,0.3); }
         .faq-card { transition: all 0.3s ease; }
-        .faq-card:hover { border-color: rgba(255,255,255,0.2); background-color: rgba(255,255,255,0.05); }
+        .faq-card:hover { border-color: rgba(255,255,255,0.3); background-color: rgba(255,255,255,0.08); }
+        .glass-panel { background: rgba(15, 15, 15, 0.7); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
     </style>
 
     <script async src="https://www.googletagmanager.com/gtag/js?id=AW-18009767847"></script>
@@ -42,97 +48,123 @@
       window.dataLayer = window.dataLayer || [];
       function gtag(){dataLayer.push(arguments);}
       gtag('js', new Date());
-
       gtag('config', 'AW-18009767847');
     </script>
 </head>
 <body class="antialiased overflow-x-hidden">
 
+    <!-- Floating WhatsApp Button -->
     <a href="https://wa.me/5491135061075?text=Hola,%20ya%20usé%20mis%203%20días%20de%20prueba%20y%20quiero%20activar%20el%20abono%20mensual%20de%20CuevanaTV." 
        target="_blank"
-       class="fixed bottom-6 right-6 bg-whatsapp hover:bg-green-500 text-white w-16 h-16 rounded-full flex items-center justify-center text-3xl shadow-[0_0_20px_rgba(37,211,102,0.4)] hover:scale-110 transition-all z-50">
+       class="fixed bottom-6 right-6 bg-whatsapp hover:bg-green-500 text-white w-16 h-16 rounded-full flex items-center justify-center text-3xl shadow-[0_0_20px_rgba(37,211,102,0.4)] hover:scale-110 transition-transform duration-300 z-50">
         <i class="fab fa-whatsapp"></i>
     </a>
 
-    <nav class="fixed w-full z-40 bg-black/90 backdrop-blur-xl border-b border-white/5">
+    <!-- Navbar -->
+    <nav class="fixed w-full z-40 bg-black/80 backdrop-blur-xl border-b border-white/5">
         <div class="max-w-6xl mx-auto px-6 h-20 flex items-center justify-between">
-            <div class="flex items-center gap-3 cursor-pointer" onclick="window.scrollTo(0,0)">
-                <div class="w-10 h-10 bg-netflix rounded-xl flex items-center justify-center shadow-lg shadow-netflix/40">
+            <div class="flex items-center gap-3 cursor-pointer group" onclick="window.scrollTo(0,0)">
+                <div class="w-10 h-10 bg-netflix rounded-xl flex items-center justify-center shadow-lg shadow-netflix/40 group-hover:scale-110 transition-transform">
                     <i class="fas fa-play text-white ml-1"></i>
                 </div>
                 <span class="text-2xl font-black tracking-tight text-white">CUEVANATV</span>
             </div>
             <div class="hidden md:flex gap-8 text-sm font-bold text-gray-400">
-                <a href="#inicio" class="hover:text-white transition">Inicio</a>
-                <a href="#beneficios" class="hover:text-white transition">Beneficios</a>
-                <a href="#precios" class="hover:text-white transition">Precios</a>
-                <a href="#guia" class="hover:text-white transition">Instalación</a>
+                <a href="#inicio" class="hover:text-white hover:scale-105 transition-all">Inicio</a>
+                <a href="#beneficios" class="hover:text-white hover:scale-105 transition-all">Beneficios</a>
+                <a href="#precios" class="hover:text-white hover:scale-105 transition-all">Precios</a>
+                <a href="#guia" class="hover:text-white hover:scale-105 transition-all">Instalación</a>
             </div>
-            <a href="https://wa.me/5491135061075?text=Hola,%20ya%20usé%20mis%203%20días%20de%20prueba%20y%20quiero%20activar%20el%20abono%20mensual%20de%20CuevanaTV."
-               target="_blank"
+            <a href="#precios"
                class="bg-netflix hover:bg-netflixHover text-white px-6 py-2.5 rounded-full text-sm font-bold transition-all shadow-[0_0_20px_rgba(229,9,20,0.4)] hover:scale-105">
-                Activar Plan
+                Ver Oferta
             </a>
         </div>
     </nav>
 
+    <!-- Hero Section -->
     <header id="inicio" class="relative pt-40 pb-24 px-4 hero-bg min-h-screen flex items-center justify-center">
+        <div class="absolute inset-0 bg-gradient-to-b from-transparent via-black/50 to-black"></div>
         <div class="max-w-5xl mx-auto text-center relative z-10">
-            <div class="inline-block bg-white/10 backdrop-blur-md border border-white/10 rounded-full px-4 py-1.5 mb-6">
-                <span class="text-netflix font-bold text-sm tracking-widest uppercase">NUEVA VERSIÓN 2026</span>
+            
+            <div class="inline-block bg-netflix/20 border border-netflix/50 rounded-full px-5 py-2 mb-6 animate-pulse-slow">
+                <span class="text-white font-bold text-sm tracking-widest uppercase flex items-center gap-2">
+                    <i class="fas fa-mobile-alt"></i> ¡Nueva Versión: Ahora en Celulares! <i class="fas fa-tv"></i>
+                </span>
             </div>
+            
             <h1 class="text-5xl md:text-7xl lg:text-8xl font-black text-white mb-6 tracking-tight leading-tight">
-                El Cine en casa,<br>
-                <span class="text-transparent bg-clip-text bg-gradient-to-r from-netflix to-red-500">Sin Interrupciones.</span>
+                El Cine en tu TV <br> y en tu <span class="text-transparent bg-clip-text bg-gradient-to-r from-netflix to-red-500 glow-text">Celular.</span>
             </h1>
             
-            <div class="float-anim bg-black/60 backdrop-blur-xl border border-white/10 p-8 rounded-3xl mb-12 inline-block glow-box transform hover:scale-105 transition duration-300">
-                <p class="text-sm text-gray-400 uppercase font-bold tracking-widest mb-3">Código Downloader App</p>
+            <p class="text-xl md:text-2xl text-gray-300 mb-10 max-w-3xl mx-auto font-light">
+                Disfrutá del mejor contenido sin cortes ni interrupciones. Un solo abono, todos tus dispositivos.
+            </p>
+            
+            <div class="float-anim glass-panel border border-white/10 p-8 rounded-3xl mb-12 inline-block glow-box">
+                <p class="text-sm text-gray-400 uppercase font-bold tracking-widest mb-3">Código Downloader App (TV)</p>
                 <div class="text-6xl md:text-7xl font-black text-white tracking-[0.15em]">2931858</div>
-                <p class="text-xs text-netflix mt-3 font-bold uppercase"><i class="fas fa-fire mr-1"></i> 3 DÍAS DE PRUEBA GRATIS AL INSTALAR</p>
+                <p class="text-sm text-netflix mt-4 font-bold uppercase tracking-wider"><i class="fas fa-gift mr-1"></i> 3 Días de Prueba Gratis</p>
             </div>
 
             <div class="flex flex-col sm:flex-row gap-6 justify-center items-center mt-4">
-                <a href="https://drive.google.com/uc?export=download&id=1ti6OLScXC5Lo1MUo8RtjNPa9RvC1fKSh" class="w-full sm:w-auto bg-white text-black px-8 py-4 rounded-full font-bold text-lg hover:bg-gray-200 transition-all flex items-center justify-center gap-3 shadow-xl">
-                    <i class="fas fa-download"></i> Bajar APK Directa
+                <a href="https://drive.google.com/uc?export=download&id=1ti6OLScXC5Lo1MUo8RtjNPa9RvC1fKSh" class="w-full sm:w-auto bg-white text-black px-8 py-4 rounded-full font-bold text-lg hover:bg-gray-200 hover:scale-105 transition-all flex items-center justify-center gap-3 shadow-xl">
+                    <i class="fas fa-download"></i> Descargar APK Directa
                 </a>
-                <a href="#guia" class="w-full sm:w-auto bg-transparent text-white px-8 py-4 rounded-full font-bold text-lg hover:bg-white/10 transition-all border border-white/20">
+                <a href="#guia" class="w-full sm:w-auto bg-transparent text-white px-8 py-4 rounded-full font-bold text-lg hover:bg-white/10 transition-all border border-white/20 flex items-center justify-center">
                     ¿Cómo instalar? <i class="fas fa-arrow-down ml-2"></i>
                 </a>
             </div>
         </div>
     </header>
 
-    <section id="beneficios" class="py-24 px-4 bg-black">
+    <!-- Beneficios -->
+    <section id="beneficios" class="py-24 px-4 bg-black relative">
+        <div class="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-3xl h-1 bg-gradient-to-r from-transparent via-netflix to-transparent opacity-30"></div>
         <div class="max-w-6xl mx-auto">
-            <div class="grid md:grid-cols-3 gap-12 text-center">
-                <div class="p-6">
-                    <div class="w-16 h-16 bg-gradient-to-br from-netflix to-red-900 rounded-2xl flex items-center justify-center mx-auto mb-6 transform -rotate-6">
+            <h2 class="text-3xl md:text-4xl font-black text-white mb-16 text-center">Todo lo que buscabas, en una sola app</h2>
+            <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-6 text-center">
+                
+                <div class="feature-card glass-panel border border-white/5 p-8 rounded-3xl">
+                    <div class="w-16 h-16 bg-gradient-to-br from-netflix to-red-900 rounded-2xl flex items-center justify-center mx-auto mb-6 transform -rotate-6 shadow-lg shadow-netflix/20">
+                        <i class="fas fa-mobile-alt text-2xl text-white"></i>
+                    </div>
+                    <h3 class="text-xl font-bold text-white mb-3">Multi-Dispositivo</h3>
+                    <p class="text-gray-400 text-sm">Usala en tu Smart TV con Android o llevala en tu celular a todos lados.</p>
+                </div>
+
+                <div class="feature-card glass-panel border border-white/5 p-8 rounded-3xl">
+                    <div class="w-16 h-16 bg-gradient-to-br from-netflix to-red-900 rounded-2xl flex items-center justify-center mx-auto mb-6 transform rotate-3 shadow-lg shadow-netflix/20">
                         <i class="fas fa-bolt text-2xl text-white"></i>
                     </div>
-                    <h3 class="text-2xl font-bold text-white mb-3">Velocidad Pura</h3>
-                    <p class="text-gray-400">Servidores premium dedicados. Disfrutá de contenido 4K y 1080p sin que la imagen se congele.</p>
+                    <h3 class="text-xl font-bold text-white mb-3">Velocidad Pura</h3>
+                    <p class="text-gray-400 text-sm">Servidores premium dedicados. Disfrutá de contenido 4K sin que se congele.</p>
                 </div>
-                <div class="p-6">
-                    <div class="w-16 h-16 bg-gradient-to-br from-netflix to-red-900 rounded-2xl flex items-center justify-center mx-auto mb-6 transform rotate-3">
+
+                <div class="feature-card glass-panel border border-white/5 p-8 rounded-3xl">
+                    <div class="w-16 h-16 bg-gradient-to-br from-netflix to-red-900 rounded-2xl flex items-center justify-center mx-auto mb-6 transform -rotate-3 shadow-lg shadow-netflix/20">
                         <i class="fas fa-film text-2xl text-white"></i>
                     </div>
-                    <h3 class="text-2xl font-bold text-white mb-3">Todo el Contenido</h3>
-                    <p class="text-gray-400">Películas, series y todos los canales deportivos en vivo en una sola aplicación nativa.</p>
+                    <h3 class="text-xl font-bold text-white mb-3">Catálogo Infinito</h3>
+                    <p class="text-gray-400 text-sm">Películas, series de todas las plataformas y canales deportivos en vivo.</p>
                 </div>
-                <div class="p-6">
-                    <div class="w-16 h-16 bg-gradient-to-br from-netflix to-red-900 rounded-2xl flex items-center justify-center mx-auto mb-6 transform -rotate-3">
+
+                <div class="feature-card glass-panel border border-white/5 p-8 rounded-3xl">
+                    <div class="w-16 h-16 bg-gradient-to-br from-netflix to-red-900 rounded-2xl flex items-center justify-center mx-auto mb-6 transform rotate-6 shadow-lg shadow-netflix/20">
                         <i class="fas fa-sync-alt text-2xl text-white"></i>
                     </div>
-                    <h3 class="text-2xl font-bold text-white mb-3">Auto-Actualizable</h3>
-                    <p class="text-gray-400">No perdés tiempo buscando versiones nuevas. La app se actualiza sola en tu televisor.</p>
+                    <h3 class="text-xl font-bold text-white mb-3">Auto-Actualizable</h3>
+                    <p class="text-gray-400 text-sm">No perdés tiempo buscando nuevas versiones, la app lo hace sola por vos.</p>
                 </div>
+
             </div>
         </div>
     </section>
 
-    <section id="precios" class="pt-12 pb-24 px-4 bg-gradient-to-b from-black to-[#0a0a0a]">
-        <div class="max-w-5xl mx-auto">
+    <!-- Precios (Con descuento) -->
+    <section id="precios" class="pt-12 pb-24 px-4 bg-gradient-to-b from-black via-[#0a0a0a] to-black relative">
+        <div class="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-netflix/10 via-transparent to-transparent opacity-50"></div>
+        <div class="max-w-5xl mx-auto relative z-10">
             
             <div class="flex flex-col sm:flex-row justify-center items-center gap-4 mb-12">
                 <div class="flex -space-x-3">
@@ -141,101 +173,146 @@
                     <img class="w-10 h-10 rounded-full border-2 border-black" src="https://ui-avatars.com/api/?name=C&background=random" alt="User">
                     <div class="w-10 h-10 rounded-full border-2 border-black bg-gray-800 flex items-center justify-center text-xs font-bold text-white">+500</div>
                 </div>
-                <p class="text-gray-400 text-sm md:text-base"><span class="text-white font-bold">Cientos de familias</span> ya disfrutan sin cortes todos los fines de semana.</p>
+                <p class="text-gray-400 text-sm md:text-base"><span class="text-white font-bold">Cientos de usuarios</span> ya disfrutan sin cortes a un precio insuperable.</p>
             </div>
 
-            <div class="bg-gradient-to-r from-netflix/20 to-transparent border border-netflix/30 rounded-3xl p-8 md:p-12 flex flex-col md:flex-row items-center justify-between gap-12 relative overflow-hidden">
-                <div class="absolute -top-24 -left-24 w-64 h-64 bg-netflix/20 rounded-full blur-3xl"></div>
+            <!-- Tarjeta de Precio -->
+            <div class="bg-gradient-to-br from-[#111] to-[#050505] border border-netflix/40 rounded-[2rem] p-8 md:p-12 flex flex-col md:flex-row items-center justify-between gap-12 relative overflow-hidden shadow-2xl shadow-netflix/10">
+                <div class="absolute -top-32 -left-32 w-72 h-72 bg-netflix/30 rounded-full blur-[80px]"></div>
+                
                 <div class="relative z-10 flex-1 text-center md:text-left">
-                    <h2 class="text-4xl md:text-5xl font-black text-white mb-6">Unificá tu entretenimiento.</h2>
-                    <p class="text-xl text-gray-400 mb-8">Probá el sistema por <strong>3 DÍAS GRATIS</strong>. Si te gusta, activás el mes completo sin contratos ni letras chicas.</p>
+                    <div class="inline-block bg-green-500/20 border border-green-500/50 text-green-400 rounded-full px-4 py-1 mb-6 font-bold text-sm">
+                        <i class="fas fa-tag mr-1"></i> NUEVO PRECIO PROMOCIONAL
+                    </div>
+                    <h2 class="text-4xl md:text-5xl font-black text-white mb-6 leading-tight">Llevá el cine <br> a donde vayas.</h2>
+                    <p class="text-xl text-gray-400 mb-8">Probá el sistema <strong>3 DÍAS GRATIS</strong>. Si te gusta, activás el mes completo sin contratos.</p>
                     <ul class="space-y-4 text-gray-300 font-medium inline-block md:block text-left">
-                        <li class="flex items-center gap-3"><i class="fas fa-check text-netflix"></i> Activación al instante</li>
-                        <li class="flex items-center gap-3"><i class="fas fa-check text-netflix"></i> Sin publicidad molesta</li>
-                        <li class="flex items-center gap-3"><i class="fas fa-check text-netflix"></i> Soporte VIP por WhatsApp</li>
+                        <li class="flex items-center gap-3"><i class="fas fa-check-circle text-netflix text-xl"></i> <span>Un solo abono, compatible con TV y Celular</span></li>
+                        <li class="flex items-center gap-3"><i class="fas fa-check-circle text-netflix text-xl"></i> <span>Sin cortes ni publicidad molesta</span></li>
+                        <li class="flex items-center gap-3"><i class="fas fa-check-circle text-netflix text-xl"></i> <span>Soporte VIP por WhatsApp 24/7</span></li>
                     </ul>
                 </div>
-                <div class="relative z-10 w-full md:w-80 shrink-0">
-                    <div class="bg-black/80 backdrop-blur-md border border-white/10 rounded-3xl p-8 text-center shadow-2xl">
-                        <span class="text-gray-400 font-bold uppercase tracking-widest text-sm">Abono Mensual</span>
-                        <div class="flex items-start justify-center gap-1 my-4">
-                            <span class="text-3xl font-bold text-white mt-2">$</span>
-                            <span class="text-7xl font-black text-white">5000</span>
+                
+                <div class="relative z-10 w-full md:w-96 shrink-0 transform transition-transform hover:scale-105">
+                    <div class="bg-black/90 backdrop-blur-xl border-2 border-netflix/50 rounded-3xl p-8 text-center shadow-[0_0_40px_rgba(229,9,20,0.15)] relative">
+                        <!-- Descuento Tag -->
+                        <div class="absolute -top-4 right-6 bg-netflix text-white text-xs font-bold px-3 py-1 rounded-full shadow-lg">
+                            40% OFF
                         </div>
-                        <p class="text-gray-500 text-sm mb-8">Final por Mes</p>
+
+                        <span class="text-gray-400 font-bold uppercase tracking-widest text-sm">Abono Mensual</span>
+                        
+                        <div class="flex items-center justify-center gap-2 mt-4 opacity-70">
+                            <span class="line-through text-gray-500 text-2xl font-bold block">Antes $5000</span>
+                        </div>
+
+                        <div class="flex items-start justify-center gap-1 mb-4 text-netflix glow-text">
+                            <span class="text-3xl font-bold mt-2">$</span>
+                            <span class="text-7xl font-black">3000</span>
+                        </div>
+                        
+                        <p class="text-gray-500 text-sm mb-8 font-medium">Precio final por mes</p>
+                        
                         <a href="https://wa.me/5491135061075?text=Hola,%20ya%20usé%20mis%203%20días%20de%20prueba%20y%20quiero%20activar%20el%20abono%20mensual%20de%20CuevanaTV."
                            target="_blank"
-                           class="block w-full bg-netflix hover:bg-netflixHover text-white font-bold py-4 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2">
-                            <i class="fab fa-whatsapp text-xl"></i> Solicitar Activación
+                           class="block w-full bg-gradient-to-r from-netflix to-red-700 hover:from-netflixHover hover:to-red-800 text-white font-bold py-4 rounded-xl transition-all shadow-lg shadow-netflix/30 flex items-center justify-center gap-3 text-lg">
+                            <i class="fab fa-whatsapp text-2xl"></i> Activar Ahora
                         </a>
                     </div>
                 </div>
             </div>
 
-            <div class="mt-16 max-w-3xl mx-auto">
-                <h3 class="text-2xl font-bold text-white mb-8 text-center uppercase tracking-wider">Preguntas Frecuentes</h3>
-                <div class="grid gap-4">
+            <!-- Preguntas Frecuentes -->
+            <div class="mt-20 max-w-4xl mx-auto">
+                <h3 class="text-2xl font-black text-white mb-8 text-center uppercase tracking-wider">Preguntas Frecuentes</h3>
+                <div class="grid md:grid-cols-2 gap-4">
                     <div class="faq-card bg-[#0f0f0f] border border-white/5 p-6 rounded-2xl">
-                        <h4 class="text-white font-bold text-lg mb-2 flex items-center gap-2"><i class="fas fa-tv text-netflix"></i> ¿En cuántas teles lo puedo usar?</h4>
-                        <p class="text-gray-400 text-sm">El abono te cubre <strong>1 pantalla a la vez</strong>. Esto lo hacemos para garantizarte que el servidor te entregue la máxima velocidad y los partidos no se corten. Podés instalarlo en varios dispositivos, pero usar uno por vez.</p>
+                        <h4 class="text-white font-bold text-lg mb-2 flex items-center gap-2"><i class="fas fa-tv text-netflix"></i> ¿En cuántos dispositivos funciona?</h4>
+                        <p class="text-gray-400 text-sm leading-relaxed">El abono te cubre <strong>1 pantalla a la vez</strong> para garantizar máxima velocidad sin cortes. Podés instalarlo en tu TV y tu Celular, pero usar uno por vez.</p>
                     </div>
                     <div class="faq-card bg-[#0f0f0f] border border-white/5 p-6 rounded-2xl">
-                        <h4 class="text-white font-bold text-lg mb-2 flex items-center gap-2"><i class="fas fa-wifi text-netflix"></i> ¿Qué velocidad de internet necesito?</h4>
-                        <p class="text-gray-400 text-sm">Recomendamos una conexión de al menos <strong>50 Megas</strong> por fibra óptica para disfrutar del contenido en Full HD y 4K sin interrupciones. Idealmente, conectá tu TV por cable de red (LAN).</p>
+                        <h4 class="text-white font-bold text-lg mb-2 flex items-center gap-2"><i class="fas fa-wifi text-netflix"></i> ¿Qué internet necesito?</h4>
+                        <p class="text-gray-400 text-sm leading-relaxed">Recomendamos al menos <strong>50 Megas</strong> por fibra óptica para disfrutar en 4K. Si usás TV, idealmente conectala por cable de red (LAN).</p>
                     </div>
-                    <div class="faq-card bg-[#0f0f0f] border border-white/5 p-6 rounded-2xl">
+                    <div class="faq-card bg-[#0f0f0f] border border-white/5 p-6 rounded-2xl md:col-span-2">
                         <h4 class="text-white font-bold text-lg mb-2 flex items-center gap-2"><i class="fas fa-credit-card text-netflix"></i> ¿Cómo se paga?</h4>
-                        <p class="text-gray-400 text-sm">Aceptamos transferencias bancarias, MercadoPago y Cuenta DNI. Una vez que termina tu prueba, nos mandás un WhatsApp y te pasamos los datos para continuar.</p>
+                        <p class="text-gray-400 text-sm leading-relaxed">Aceptamos MercadoPago, Transferencia y Cuenta DNI. Mandanos un WhatsApp cuando termine tu prueba gratuita para pasarte los datos.</p>
                     </div>
                 </div>
             </div>
         </div>
     </section>
 
-    <section class="py-16 px-4 bg-red-950/5 border-y border-white/5">
-        <div class="max-w-4xl mx-auto bg-black/60 border border-netflix/30 p-8 rounded-3xl">
+    <!-- Permisos Security -->
+    <section class="py-16 px-4 bg-gradient-to-r from-red-950/10 via-black to-red-950/10 border-y border-white/5">
+        <div class="max-w-4xl mx-auto glass-panel border border-netflix/20 p-8 rounded-3xl">
             <div class="flex items-center gap-4 mb-6">
-                <div class="w-12 h-12 bg-netflix rounded-full flex items-center justify-center shrink-0">
+                <div class="w-12 h-12 bg-netflix rounded-full flex items-center justify-center shrink-0 shadow-lg shadow-netflix/40">
                     <i class="fas fa-shield-alt text-white text-xl"></i>
                 </div>
-                <h2 class="text-2xl font-black text-white uppercase tracking-tight">Importante: Permisos de Seguridad</h2>
+                <h2 class="text-2xl font-black text-white uppercase tracking-tight">Permisos Necesarios (Android TV)</h2>
             </div>
-            <p class="text-gray-400 mb-6 italic">Android TV bloquea apps fuera de la tienda oficial. Debés hacer esto para poder instalar:</p>
+            <p class="text-gray-400 mb-6 italic">Para instalar la app en tu televisor, primero debés darle permiso a tu sistema:</p>
             <div class="grid md:grid-cols-2 gap-4">
-                <div class="bg-white/5 p-4 rounded-xl border border-white/5"><span class="text-white font-bold block mb-1">1. Ajustes</span> Ve a Configuración > Aplicaciones.</div>
-                <div class="bg-white/5 p-4 rounded-xl border border-white/5"><span class="text-white font-bold block mb-1">2. Acceso Especial</span> Buscá "Instalar apps desconocidas".</div>
-                <div class="bg-white/5 p-4 rounded-xl border border-white/5"><span class="text-white font-bold block mb-1">3. Activar</span> Seleccioná la app que uses (Downloader o File Manager) y ponelo en ON.</div>
-                <div class="bg-white/5 p-4 rounded-xl border border-white/5"><span class="text-white font-bold block mb-1">4. Si no aparece</span> En "Información de sistema", pulsá 7 veces "Compilación" para activar Modo Desarrollador.</div>
+                <div class="bg-black/50 p-4 rounded-xl border border-white/5 hover:border-netflix/50 transition-colors"><span class="text-white font-bold block mb-1 text-lg">1. Ajustes</span> Ve a Configuración > Aplicaciones.</div>
+                <div class="bg-black/50 p-4 rounded-xl border border-white/5 hover:border-netflix/50 transition-colors"><span class="text-white font-bold block mb-1 text-lg">2. Acceso Especial</span> Buscá "Instalar apps desconocidas".</div>
+                <div class="bg-black/50 p-4 rounded-xl border border-white/5 hover:border-netflix/50 transition-colors"><span class="text-white font-bold block mb-1 text-lg">3. Activar</span> Seleccioná la app que uses (Downloader) y ponelo en ON.</div>
+                <div class="bg-black/50 p-4 rounded-xl border border-white/5 hover:border-netflix/50 transition-colors"><span class="text-white font-bold block mb-1 text-lg">4. Desarrollador</span> Si no aparece, pulsá 7 veces en "Compilación" en Información del sistema.</div>
             </div>
         </div>
     </section>
 
+    <!-- Instalación Guía -->
     <section id="guia" class="py-24 px-4 bg-black">
         <div class="max-w-6xl mx-auto">
-            <h2 class="text-4xl font-black text-white mb-16 text-center">¿Cómo instalar en mi televisor?</h2>
-            <div class="grid md:grid-cols-3 gap-8">
-                <div class="step-card bg-[#0f0f0f] border border-white/5 p-8 rounded-3xl">
-                    <div class="w-14 h-14 bg-orange-600 rounded-2xl flex items-center justify-center mb-6"><i class="fas fa-cloud-download-alt text-2xl text-white"></i></div>
-                    <h3 class="text-xl font-bold text-white mb-4">Vía Downloader</h3>
+            <h2 class="text-4xl font-black text-white mb-4 text-center">¿Cómo instalar CuevanaTV?</h2>
+            <p class="text-gray-400 text-center mb-16 text-lg">Elegí el dispositivo donde vas a disfrutar de la app</p>
+            
+            <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+                
+                <!-- Celular -->
+                <div class="feature-card glass-panel border border-netflix/50 p-8 rounded-3xl relative overflow-hidden">
+                    <div class="absolute top-0 right-0 bg-netflix text-white text-[10px] font-bold px-3 py-1 rounded-bl-xl uppercase">Nuevo</div>
+                    <div class="w-14 h-14 bg-gradient-to-tr from-green-500 to-emerald-700 rounded-2xl flex items-center justify-center mb-6 shadow-lg shadow-green-500/20"><i class="fas fa-mobile-alt text-2xl text-white"></i></div>
+                    <h3 class="text-xl font-bold text-white mb-4">En Celulares</h3>
+                    <p class="text-gray-400 text-sm">Tocá el botón de <span class="text-white font-bold">Descargar APK Directa</span> al inicio de esta página, abrí el archivo descargado y dale a instalar.</p>
+                </div>
+
+                <!-- Downloader -->
+                <div class="feature-card bg-[#0f0f0f] border border-white/5 p-8 rounded-3xl">
+                    <div class="w-14 h-14 bg-gradient-to-tr from-orange-500 to-red-600 rounded-2xl flex items-center justify-center mb-6 shadow-lg shadow-orange-500/20"><i class="fas fa-cloud-download-alt text-2xl text-white"></i></div>
+                    <h3 class="text-xl font-bold text-white mb-4">TV: Vía Downloader</h3>
                     <p class="text-gray-400 text-sm">Instalá <strong>Downloader</strong> desde la Play Store de tu TV. Al abrirla, escribí el código <span class="text-white font-bold">2931858</span> y dale a GO.</p>
                 </div>
-                <div class="step-card bg-[#0f0f0f] border border-white/5 p-8 rounded-3xl">
-                    <div class="w-14 h-14 bg-blue-600 rounded-2xl flex items-center justify-center mb-6"><i class="fas fa-hdd text-2xl text-white"></i></div>
-                    <h3 class="text-xl font-bold text-white mb-4">Vía Pendrive</h3>
-                    <p class="text-gray-400 text-sm">Bajá la APK en tu PC, pasala a un USB e instalá <strong>File Manager +</strong> en tu TV para ejecutar el archivo desde el pendrive.</p>
+
+                <!-- Pendrive -->
+                <div class="feature-card bg-[#0f0f0f] border border-white/5 p-8 rounded-3xl">
+                    <div class="w-14 h-14 bg-gradient-to-tr from-blue-500 to-indigo-600 rounded-2xl flex items-center justify-center mb-6 shadow-lg shadow-blue-500/20"><i class="fas fa-hdd text-2xl text-white"></i></div>
+                    <h3 class="text-xl font-bold text-white mb-4">TV: Vía Pendrive</h3>
+                    <p class="text-gray-400 text-sm">Bajá la APK en tu PC, pasala a un USB e instalá <strong>File Manager</strong> en tu TV para ejecutar el archivo desde el pendrive.</p>
                 </div>
-                <div class="step-card bg-[#0f0f0f] border border-white/5 p-8 rounded-3xl">
-                    <div class="w-14 h-14 bg-netflix rounded-2xl flex items-center justify-center mb-6"><i class="fas fa-globe text-2xl text-white"></i></div>
-                    <h3 class="text-xl font-bold text-white mb-4">Vía Navegador Web</h3>
-                    <p class="text-gray-400 text-sm">Abrí el navegador de tu TV e ingresá a <span class="text-white font-bold">cuevanatv.store</span> y tocá el botón de descarga arriba.</p>
+
+                <!-- Navegador -->
+                <div class="feature-card bg-[#0f0f0f] border border-white/5 p-8 rounded-3xl">
+                    <div class="w-14 h-14 bg-gradient-to-tr from-purple-500 to-pink-600 rounded-2xl flex items-center justify-center mb-6 shadow-lg shadow-purple-500/20"><i class="fas fa-globe text-2xl text-white"></i></div>
+                    <h3 class="text-xl font-bold text-white mb-4">TV: Navegador Web</h3>
+                    <p class="text-gray-400 text-sm">Abrí el navegador de tu TV e ingresá a <span class="text-white font-bold">cuevanatv.store</span> y tocá el botón de descarga principal.</p>
                 </div>
+
             </div>
         </div>
     </section>
 
-    <footer class="bg-black py-12 border-t border-white/10 text-center pb-24"> <div class="max-w-6xl mx-auto px-4">
-            <span class="text-lg font-black tracking-tight text-white">CUEVANATV 2026</span>
-            <p class="text-gray-600 text-sm mt-4">Desarrollado para Android TV. Disfrutá del mejor contenido.</p>
+    <!-- Footer -->
+    <footer class="bg-black py-12 border-t border-white/5 text-center pb-24 relative overflow-hidden">
+        <div class="absolute bottom-0 left-1/2 -translate-x-1/2 w-full h-1/2 bg-netflix/5 blur-[100px]"></div>
+        <div class="max-w-6xl mx-auto px-4 relative z-10">
+            <div class="flex justify-center items-center gap-2 mb-4">
+                <i class="fas fa-play text-netflix"></i>
+                <span class="text-2xl font-black tracking-tight text-white">CUEVANATV</span>
+            </div>
+            <p class="text-gray-500 text-sm">Desarrollado para Android TV y Smartphones. El mejor entretenimiento, a un clic de distancia.</p>
+            <p class="text-gray-700 text-xs mt-6 font-bold uppercase tracking-widest">&copy; 2026 CuevanaTV</p>
         </div>
     </footer>
 

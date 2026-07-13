@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Estado EN FOCO (Seleccionado con el control remoto) -->
+    <item android:state_focused="true">
+        <shape android:shape="rectangle">
+            <solid android:color="#FFFFFF" /> <!-- Resaltado Blanco -->
+            <corners android:radius="8dp" />
+        </shape>
+    </item>
+    <!-- Estado NORMAL -->
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="#B3000000" /> <!-- Fondo Negro Traslúcido -->
+            <corners android:radius="8dp" />
+            <stroke android:width="1dp" android:color="#44FFFFFF" />
+        </shape>
+    </item>
+</selector>

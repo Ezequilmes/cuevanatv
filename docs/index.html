@@ -626,43 +626,28 @@
     </div>
 
     <script>
-        // CONFIGURACIÓN SUPABASE - DEBES REEMPLAZAR CON TUS CREDENCIALES
-        const SUPABASE_URL = "https://tu-url-supabase.supabase.co";
-        const SUPABASE_KEY = "tu-anon-key";
-        const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-
-        let currentMode = 'login';
-        let currentUser = null;
-
-        // Inicialización
-        document.addEventListener('DOMContentLoaded', async () => {
-            const { data: { session } } = await supabase.auth.getSession();
-            updateAuthState(session?.user || null);
-
-            supabase.auth.onAuthStateChange((_event, session) => {
-                updateAuthState(session?.user || null);
-            });
-        });
-
-        // Auth Functions
-        async function openAuthModal(mode = 'login') {
+        function openAuthModal(mode = 'login') {
             currentMode = mode;
             updateAuthModalUI();
-            document.getElementById('auth-modal').classList.remove('hidden');
-            document.getElementById('auth-modal').classList.add('flex');
+            const modal = document.getElementById('auth-modal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
         }
 
         function updateAuthModalUI() {
             const title = document.getElementById('auth-title');
+            const subtitle = document.getElementById('auth-subtitle');
             const submitBtn = document.getElementById('auth-submit-btn');
             const toggleText = document.getElementById('auth-toggle-text');
 
             if (currentMode === 'login') {
                 title.innerText = 'Iniciar Sesión';
+                subtitle.innerText = 'Accede a tu contenido premium';
                 submitBtn.innerText = 'Entrar ahora';
                 toggleText.innerHTML = '¿No tienes cuenta? <button onclick="toggleAuthMode()" class="text-white font-bold hover:underline">Regístrate gratis</button>';
             } else {
                 title.innerText = 'Crear Cuenta';
+                subtitle.innerText = 'Empieza tu prueba de 3 días gratis';
                 submitBtn.innerText = 'Registrarme';
                 toggleText.innerHTML = '¿Ya tienes cuenta? <button onclick="toggleAuthMode()" class="text-white font-bold hover:underline">Inicia sesión</button>';
             }
@@ -673,178 +658,46 @@
             updateAuthModalUI();
         }
 
+        function closeModal(id) {
+            const modal = document.getElementById(id);
+            modal.classList.remove('flex');
+            modal.classList.add('hidden');
+        }
+
+        // Cerrar modal al hacer clic fuera
+        window.onclick = function(event) {
+            const authModal = document.getElementById('auth-modal');
+            const dashModal = document.getElementById('dashboard-modal');
+            if (event.target == authModal) closeModal('auth-modal');
+            if (event.target == dashModal) closeModal('dashboard-modal');
+        }
+
+        // Lógica de Envío de Formulario (Simulada para Supabase)
         document.getElementById('auth-form').addEventListener('submit', async (e) => {
             e.preventDefault();
-            const email = document.getElementById('auth-email').value;
-            const password = document.getElementById('auth-password').value;
             const btn = document.getElementById('auth-submit-btn');
+            const originalText = btn.innerText;
 
+            // Estado de Carga
             btn.disabled = true;
-            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Procesando...';
+            btn.innerHTML = `<i class="fas fa-spinner fa-spin mr-2"></i> Procesando...`;
 
             try {
-                if (currentMode === 'login') {
-                    const { error } = await supabase.auth.signInWithPassword({ email, password });
-                    if (error) throw error;
-                } else {
-                    const { error, data } = await supabase.auth.signUp({ email, password });
-                    if (error) throw error;
+                // Simulación de delay de red (2 segundos)
+                await new Promise(resolve => setTimeout(resolve, 2000));
 
-                    // Inicializar perfil si es nuevo
-                    if (data.user) {
-                        const trialDate = new Date();
-                        trialDate.setDate(trialDate.getDate() + 3);
-                        await supabase.from('profiles').insert([
-                            { id: data.user.id, email: email, subscription_expires_at: trialDate.toISOString(), is_active: true }
-                        ]);
-                    }
-                    alert('¡Registro exitoso! Ya puedes iniciar sesión.');
-                    currentMode = 'login';
-                    updateAuthModalUI();
-                    btn.disabled = false;
-                    return;
-                }
+                // Aquí se conectará la lógica real de Supabase
+                console.log("Formulario enviado en modo:", currentMode);
+                alert("Estructura lista. Ahora conecta tus credenciales de Supabase para activar el sistema real.");
+
                 closeModal('auth-modal');
             } catch (error) {
-                alert('Error: ' + error.message);
+                console.error(error);
             } finally {
                 btn.disabled = false;
-                btn.innerText = currentMode === 'login' ? 'Entrar ahora' : 'Registrarme';
+                btn.innerText = originalText;
             }
         });
-
-        async function updateAuthState(user) {
-            currentUser = user;
-            const authBtns = document.getElementById('auth-buttons');
-            const userMenu = document.getElementById('user-menu');
-            const adminBtn = document.getElementById('admin-btn');
-
-            if (user) {
-                authBtns.classList.add('hidden');
-                userMenu.classList.remove('hidden');
-                document.getElementById('nav-user-email').innerText = user.email;
-
-                // Mostrar admin si corresponde
-                if (user.email === 'Eventos3.0@hotmail.com') {
-                    adminBtn.classList.remove('hidden');
-                    adminBtn.classList.add('flex');
-                }
-            } else {
-                authBtns.classList.remove('hidden');
-                userMenu.classList.add('hidden');
-                adminBtn.classList.add('hidden');
-            }
-        }
-
-        async function handleLogout() {
-            await supabase.auth.signOut();
-            closeModal('dashboard-modal');
-            window.location.reload();
-        }
-
-        // Dashboard Functions
-        async function openDashboard() {
-            if (!currentUser) return;
-
-            document.getElementById('dashboard-modal').classList.remove('hidden');
-            document.getElementById('dashboard-modal').classList.add('flex');
-            document.getElementById('dash-email').innerText = currentUser.email;
-
-            const { data: profile } = await supabase
-                .from('profiles')
-                .select('*')
-                .eq('id', currentUser.id)
-                .single();
-
-            if (profile) {
-                const now = new Date();
-                const expiry = new Date(profile.subscription_expires_at);
-                const diffTime = expiry - now;
-                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-                const badge = document.getElementById('dash-status-badge');
-                const daysDisplay = document.getElementById('dash-days');
-                const paySection = document.getElementById('payment-section');
-                const activeMsg = document.getElementById('active-service-msg');
-
-                daysDisplay.innerText = diffDays > 0 ? diffDays : 0;
-
-                if (diffDays > 0 && profile.is_active) {
-                    badge.innerText = 'Servicio Activo';
-                    badge.className = 'inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black uppercase bg-green-500/20 text-green-400';
-                    activeMsg.classList.remove('hidden');
-                    paySection.classList.add('hidden');
-                } else {
-                    badge.innerText = 'Servicio Vencido';
-                    badge.className = 'inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black uppercase bg-red-500/20 text-red-400';
-                    activeMsg.classList.add('hidden');
-                    paySection.classList.remove('hidden');
-                }
-            }
-        }
-
-        // Mercado Pago Integration
-        function initMercadoPago() {
-            const btn = document.getElementById('checkout-btn');
-            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generando pago...';
-
-            // Aquí iría tu integración real del backend para crear la preferencia
-            // Por simplicidad en el index.html, esto debería redirigir a un webhook o página de pago
-            setTimeout(() => {
-                alert('Redirigiendo a Mercado Pago... \n(Aquí se integraría el Checkout Pro con tu Access Token)');
-                btn.innerText = 'Pagar Abono ($3000 ARS)';
-            }, 1500);
-        }
-
-        // Admin Functions
-        async function openAdminPanel() {
-            if (currentUser?.email !== 'Eventos3.0@hotmail.com') return;
-
-            document.getElementById('admin-modal').classList.remove('hidden');
-            document.getElementById('admin-modal').classList.add('flex');
-
-            const { data: users } = await supabase.from('profiles').select('*');
-            const list = document.getElementById('admin-user-list');
-            list.innerHTML = '';
-
-            users.forEach(u => {
-                const expiry = new Date(u.subscription_expires_at).toLocaleDateString();
-                const row = document.createElement('tr');
-                row.className = 'border-b border-white/5 hover:bg-white/[0.02] transition-colors';
-                row.innerHTML = `
-                    <td class="py-4 px-4 text-white font-medium">${u.email}</td>
-                    <td class="py-4 px-4 text-gray-400">${expiry}</td>
-                    <td class="py-4 px-4">
-                        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${u.is_active ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}">
-                            ${u.is_active ? 'ACTIVO' : 'INACTIVO'}
-                        </span>
-                    </td>
-                    <td class="py-4 px-4 text-right">
-                        <button onclick="extendUser('${u.id}')" class="text-amber-500 hover:text-amber-400 font-bold text-xs">+30 Días</button>
-                    </td>
-                `;
-                list.appendChild(row);
-            });
-        }
-
-        async function extendUser(id) {
-            const { data } = await supabase.from('profiles').select('subscription_expires_at').eq('id', id).single();
-            const newExpiry = new Date(data.subscription_expires_at);
-            newExpiry.setMonth(newExpiry.getMonth() + 1);
-
-            await supabase.from('profiles').update({
-                subscription_expires_at: newExpiry.toISOString(),
-                is_active: true
-            }).eq('id', id);
-
-            alert('Usuario extendido correctamente');
-            openAdminPanel(); // Refresh list
-        }
-
-        function closeModal(id) {
-            document.getElementById(id).classList.remove('flex');
-            document.getElementById(id).classList.add('hidden');
-        }
     </script>
 
     <style>

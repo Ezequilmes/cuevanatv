@@ -626,21 +626,204 @@
     </div>
 
     <script>
+        // CONFIGURACIÓN GLOBAL
         const SUPABASE_URL = "https://hflcacrgwxszejlkcxsh.supabase.co";
         const SUPABASE_ANON_KEY = "sb_publishable_JmQBsLcvMBc-vFn0-lAXIg_3pQLaip7";
+        const MP_PUBLIC_KEY = "APP_USR-f349d97a-9769-42b7-8321-7290076a5992"; // SUSTITUIR POR TU CLAVE REAL
 
-        // Inicialización correcta de Supabase
+        // Inicialización de Clientes
         const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        const mp = new MercadoPago(MP_PUBLIC_KEY, { locale: 'es-AR' });
 
         let currentUser = null;
         let currentMode = 'login';
+
+        // --- GESTIÓN DE SESIÓN PERSISTENTE ---
+        async function checkSession() {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session) {
+                await syncUserData(session.user);
+            }
+        }
+
+        // Escuchar cambios de estado en tiempo real
+        supabase.auth.onAuthStateChange(async (event, session) => {
+            if (event === 'SIGNED_IN' && session) {
+                await syncUserData(session.user);
+            } else if (event === 'SIGNED_OUT') {
+                updateUI(null);
+            }
+        });
+
+        async function syncUserData(authUser) {
+            // Buscamos los metadatos extendidos en la tabla app_users
+            const { data: userData, error } = await supabase
+                .from('app_users')
+                .select('*')
+                .eq('email', authUser.email)
+                .single();
+
+            if (userData) {
+                updateUI(userData);
+            } else {
+                // Fallback si el trigger no ha corrido todavía
+                updateUI({ email: authUser.email, active: false, days_remaining: 0 });
+            }
+        }
+
+        // --- AUTENTICACIÓN NATIVA (REFACTORIZADA) ---
+        async function handleAuth(email, password) {
+            if (currentMode === 'login') {
+                const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+                if (error) throw error;
+                return data.user;
+            } else {
+                // Registro Nativo
+                const { data, error } = await supabase.auth.signUp({
+                    email,
+                    password,
+                    options: {
+                        data: {
+                            full_name: email.split('@')[0]
+                        }
+                    }
+                });
+                if (error) throw error;
+
+                // Registro manual en tabla app_users (Si no usas Trigger)
+                const { error: dbError } = await supabase.from('app_users').insert([{
+                    email: email,
+                    password: password, // Opcional, ya que Auth lo maneja internamente
+                    active: true,
+                    days_remaining: 3,
+                    fecha_vencimiento: new Date(Date.now() + 3*24*60*60*1000).toISOString(),
+                    limite_pantallas: 1
+                }]);
+
+                return data.user;
+            }
+        }
+
+        // --- INTEGRACIÓN MERCADOPAGO V2 ---
+        async function initMercadoPago() {
+            if (!currentUser) return alert("Debes iniciar sesión para pagar.");
+
+            const btn = document.getElementById('checkout-btn');
+            const originalContent = btn.innerHTML;
+
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Generando orden...';
+
+            try {
+                // 1. Llamada al Backend (Supabase Edge Function) para crear la preferencia
+                const response = await fetch(`${SUPABASE_URL}/functions/v1/create-preference`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+                    },
+                    body: JSON.stringify({
+                        email: currentUser.email,
+                        title: "Abono Mensual CuevanaTV",
+                        price: 3000
+                    })
+                });
+
+                const { preferenceId, error } = await response.json();
+                if (error || !preferenceId) throw new Error("No se pudo obtener el ID de pago.");
+
+                // 2. Abrir Checkout Pro
+                mp.checkout({
+                    preference: { id: preferenceId },
+                    autoOpen: true
+                });
+
+            } catch (err) {
+                console.error("Error MP:", err);
+                alert("Fallo al conectar con MercadoPago. Intenta nuevamente.");
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = originalContent;
+            }
+        }
+
+        // --- UI CORE ---
+        function updateUI(user) {
+            currentUser = user;
+            const authBtns = document.getElementById('auth-buttons');
+            const userMenu = document.getElementById('user-menu');
+            const navEmail = document.getElementById('nav-user-email');
+            const adminBtn = document.getElementById('admin-btn');
+
+            if (user) {
+                authBtns.classList.add('hidden');
+                userMenu.classList.remove('hidden');
+                navEmail.innerText = user.email;
+                if (user.email === 'mazzera@hot.com') adminBtn.classList.remove('hidden');
+            } else {
+                authBtns.classList.remove('hidden');
+                userMenu.classList.add('hidden');
+                adminBtn.classList.add('hidden');
+            }
+        }
+
+        document.getElementById('auth-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = document.getElementById('auth-email').value;
+            const password = document.getElementById('auth-password').value;
+            const btn = document.getElementById('auth-submit-btn');
+            const originalText = btn.innerText;
+
+            btn.disabled = true;
+            btn.innerHTML = `<i class="fas fa-spinner fa-spin mr-2"></i> Procesando...`;
+
+            try {
+                await handleAuth(email, password);
+                closeModal('auth-modal');
+                if (currentMode === 'signup') {
+                    alert("¡Cuenta creada! Revisa tu email para confirmar tu suscripción.");
+                }
+            } catch (error) {
+                alert("Error: " + error.message);
+            } finally {
+                btn.disabled = false;
+                btn.innerText = originalText;
+            }
+        });
+
+        function handleLogout() {
+            supabase.auth.signOut();
+            closeModal('dashboard-modal');
+        }
+
+        function openDashboard() {
+            if (!currentUser) return;
+            document.getElementById('dash-email').innerText = currentUser.email;
+            const statusBadge = document.getElementById('dash-status-badge');
+            const daysText = document.getElementById('dash-days');
+
+            if (currentUser.active) {
+                statusBadge.innerText = "Activo";
+                statusBadge.className = "inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black uppercase bg-green-500/20 text-green-400";
+                daysText.innerText = currentUser.days_remaining || "0";
+                document.getElementById('active-service-msg').classList.remove('hidden');
+                document.getElementById('payment-section').classList.add('hidden');
+            } else {
+                statusBadge.innerText = "Vencido";
+                statusBadge.className = "inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black uppercase bg-netflix/20 text-netflix";
+                daysText.innerText = "0";
+                document.getElementById('active-service-msg').classList.add('hidden');
+                document.getElementById('payment-section').classList.remove('hidden');
+            }
+
+            document.getElementById('dashboard-modal').classList.replace('hidden', 'flex');
+        }
 
         function openAuthModal(mode = 'login') {
             currentMode = mode;
             updateAuthModalUI();
             const modal = document.getElementById('auth-modal');
-            modal.classList.remove('hidden');
-            modal.classList.add('flex');
+            modal.classList.replace('hidden', 'flex');
         }
 
         function updateAuthModalUI() {
@@ -669,127 +852,11 @@
 
         function closeModal(id) {
             const modal = document.getElementById(id);
-            modal.classList.remove('flex');
-            modal.classList.add('hidden');
+            modal.classList.replace('flex', 'hidden');
         }
 
-        // Cerrar modal al hacer clic fuera
-        window.onclick = function(event) {
-            const authModal = document.getElementById('auth-modal');
-            const dashModal = document.getElementById('dashboard-modal');
-            if (event.target == authModal) closeModal('auth-modal');
-            if (event.target == dashModal) closeModal('dashboard-modal');
-        }
-
-        async function login(email, password) {
-            const { data, error } = await supabase
-                .from('app_users')
-                .select('*')
-                .eq('email', email)
-                .eq('password', password);
-
-            if (error) throw error;
-            if (!data || data.length === 0) throw new Error("Credenciales inválidas");
-            return data[0];
-        }
-
-        async function register(email, password) {
-            const now = new Date();
-            now.setDate(now.getDate() + 3);
-            const expiry = now.toISOString();
-
-            const { data, error } = await supabase
-                .from('app_users')
-                .insert([{
-                    email,
-                    password,
-                    active: true,
-                    days_remaining: 3,
-                    fecha_vencimiento: expiry,
-                    limite_pantallas: 1
-                }])
-                .select();
-
-            if (error) throw error;
-            if (!data || data.length === 0) throw new Error("Error al registrar");
-            return data[0];
-        }
-
-        function updateUI(user) {
-            currentUser = user;
-            if (user) {
-                document.getElementById('auth-buttons').classList.add('hidden');
-                document.getElementById('user-menu').classList.remove('hidden');
-                document.getElementById('nav-user-email').innerText = user.email;
-                if (user.email === 'mazzera@hot.com') { // Admin check simple
-                    document.getElementById('admin-btn').classList.remove('hidden');
-                }
-            } else {
-                document.getElementById('auth-buttons').classList.remove('hidden');
-                document.getElementById('user-menu').classList.add('hidden');
-                document.getElementById('admin-btn').classList.add('hidden');
-            }
-        }
-
-        document.getElementById('auth-form').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const email = document.getElementById('auth-email').value;
-            const password = document.getElementById('auth-password').value;
-            const btn = document.getElementById('auth-submit-btn');
-            const originalText = btn.innerText;
-
-            btn.disabled = true;
-            btn.innerHTML = `<i class="fas fa-spinner fa-spin mr-2"></i> Procesando...`;
-
-            try {
-                let user;
-                if (currentMode === 'login') {
-                    user = await login(email, password);
-                } else {
-                    user = await register(email, password);
-                }
-                updateUI(user);
-                closeModal('auth-modal');
-                setTimeout(() => {
-                    alert(currentMode === 'login' ? "¡Bienvenido de nuevo!" : "¡Cuenta creada con éxito! Tienes 3 días gratis.");
-                }, 100);
-            } catch (error) {
-                alert("Error: " + error.message);
-            } finally {
-                btn.disabled = false;
-                btn.innerText = originalText;
-            }
-        });
-
-        function handleLogout() {
-            updateUI(null);
-            closeModal('dashboard-modal');
-        }
-
-        function openDashboard() {
-            if (!currentUser) return;
-            document.getElementById('dash-email').innerText = currentUser.email;
-            const statusBadge = document.getElementById('dash-status-badge');
-            const daysText = document.getElementById('dash-days');
-
-            if (currentUser.active) {
-                statusBadge.innerText = "Activo";
-                statusBadge.className = "inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black uppercase bg-green-500/20 text-green-400";
-                daysText.innerText = currentUser.days_remaining || "0";
-                document.getElementById('active-service-msg').classList.remove('hidden');
-                document.getElementById('payment-section').classList.add('hidden');
-            } else {
-                statusBadge.innerText = "Vencido";
-                statusBadge.className = "inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black uppercase bg-netflix/20 text-netflix";
-                daysText.innerText = "0";
-                document.getElementById('active-service-msg').classList.add('hidden');
-                document.getElementById('payment-section').classList.remove('hidden');
-            }
-
-            const modal = document.getElementById('dashboard-modal');
-            modal.classList.remove('hidden');
-            modal.classList.add('flex');
-        }
+        // Inicializar al cargar la página
+        document.addEventListener('DOMContentLoaded', checkSession);
     </script>
 
     <style>

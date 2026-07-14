@@ -626,6 +626,15 @@
     </div>
 
     <script>
+        const SUPABASE_URL = "https://hflcacrgwxszejlkcxsh.supabase.co";
+        const SUPABASE_ANON_KEY = "sb_publishable_JmQBsLcvMBc-vFn0-lAXIg_3pQLaip7";
+
+        // Inicialización correcta de Supabase
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        let currentUser = null;
+        let currentMode = 'login';
+
         function openAuthModal(mode = 'login') {
             currentMode = mode;
             updateAuthModalUI();
@@ -672,32 +681,115 @@
             if (event.target == dashModal) closeModal('dashboard-modal');
         }
 
-        // Lógica de Envío de Formulario (Simulada para Supabase)
+        async function login(email, password) {
+            const { data, error } = await supabase
+                .from('app_users')
+                .select('*')
+                .eq('email', email)
+                .eq('password', password);
+
+            if (error) throw error;
+            if (!data || data.length === 0) throw new Error("Credenciales inválidas");
+            return data[0];
+        }
+
+        async function register(email, password) {
+            const now = new Date();
+            now.setDate(now.getDate() + 3);
+            const expiry = now.toISOString();
+
+            const { data, error } = await supabase
+                .from('app_users')
+                .insert([{
+                    email,
+                    password,
+                    active: true,
+                    days_remaining: 3,
+                    fecha_vencimiento: expiry,
+                    limite_pantallas: 1
+                }])
+                .select();
+
+            if (error) throw error;
+            if (!data || data.length === 0) throw new Error("Error al registrar");
+            return data[0];
+        }
+
+        function updateUI(user) {
+            currentUser = user;
+            if (user) {
+                document.getElementById('auth-buttons').classList.add('hidden');
+                document.getElementById('user-menu').classList.remove('hidden');
+                document.getElementById('nav-user-email').innerText = user.email;
+                if (user.email === 'mazzera@hot.com') { // Admin check simple
+                    document.getElementById('admin-btn').classList.remove('hidden');
+                }
+            } else {
+                document.getElementById('auth-buttons').classList.remove('hidden');
+                document.getElementById('user-menu').classList.add('hidden');
+                document.getElementById('admin-btn').classList.add('hidden');
+            }
+        }
+
         document.getElementById('auth-form').addEventListener('submit', async (e) => {
             e.preventDefault();
+            const email = document.getElementById('auth-email').value;
+            const password = document.getElementById('auth-password').value;
             const btn = document.getElementById('auth-submit-btn');
             const originalText = btn.innerText;
 
-            // Estado de Carga
             btn.disabled = true;
             btn.innerHTML = `<i class="fas fa-spinner fa-spin mr-2"></i> Procesando...`;
 
             try {
-                // Simulación de delay de red (2 segundos)
-                await new Promise(resolve => setTimeout(resolve, 2000));
-
-                // Aquí se conectará la lógica real de Supabase
-                console.log("Formulario enviado en modo:", currentMode);
-                alert("Estructura lista. Ahora conecta tus credenciales de Supabase para activar el sistema real.");
-
+                let user;
+                if (currentMode === 'login') {
+                    user = await login(email, password);
+                } else {
+                    user = await register(email, password);
+                }
+                updateUI(user);
                 closeModal('auth-modal');
+                setTimeout(() => {
+                    alert(currentMode === 'login' ? "¡Bienvenido de nuevo!" : "¡Cuenta creada con éxito! Tienes 3 días gratis.");
+                }, 100);
             } catch (error) {
-                console.error(error);
+                alert("Error: " + error.message);
             } finally {
                 btn.disabled = false;
                 btn.innerText = originalText;
             }
         });
+
+        function handleLogout() {
+            updateUI(null);
+            closeModal('dashboard-modal');
+        }
+
+        function openDashboard() {
+            if (!currentUser) return;
+            document.getElementById('dash-email').innerText = currentUser.email;
+            const statusBadge = document.getElementById('dash-status-badge');
+            const daysText = document.getElementById('dash-days');
+
+            if (currentUser.active) {
+                statusBadge.innerText = "Activo";
+                statusBadge.className = "inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black uppercase bg-green-500/20 text-green-400";
+                daysText.innerText = currentUser.days_remaining || "0";
+                document.getElementById('active-service-msg').classList.remove('hidden');
+                document.getElementById('payment-section').classList.add('hidden');
+            } else {
+                statusBadge.innerText = "Vencido";
+                statusBadge.className = "inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black uppercase bg-netflix/20 text-netflix";
+                daysText.innerText = "0";
+                document.getElementById('active-service-msg').classList.add('hidden');
+                document.getElementById('payment-section').classList.remove('hidden');
+            }
+
+            const modal = document.getElementById('dashboard-modal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
     </script>
 
     <style>

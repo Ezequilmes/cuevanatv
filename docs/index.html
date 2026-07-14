@@ -671,37 +671,58 @@
             }
         }
 
-        // --- AUTENTICACIÓN NATIVA (REFACTORIZADA) ---
-        async function handleAuth(email, password) {
-            if (currentMode === 'login') {
-                const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-                if (error) throw error;
-                return data.user;
-            } else {
-                // Registro Nativo
-                const { data, error } = await supabase.auth.signUp({
-                    email,
-                    password,
-                    options: {
-                        data: {
-                            full_name: email.split('@')[0]
-                        }
-                    }
-                });
-                if (error) throw error;
+        // --- AUTENTICACIÓN HÍBRIDA (COMPATIBLE CON APK) ---
+        async function login(email, password) {
+            // 1. Intentamos loguear con la tabla app_users original para compatibilidad con la APK
+            const { data, error } = await supabase
+                .from('app_users')
+                .select('*')
+                .eq('email', email)
+                .eq('password', password);
 
-                // Registro manual en tabla app_users (Si no usas Trigger)
-                const { error: dbError } = await supabase.from('app_users').insert([{
+            if (error) throw error;
+            if (!data || data.length === 0) throw new Error("Credenciales inválidas o usuario no existe.");
+
+            // 2. Logueo silencioso en Auth para sesión web
+            await supabase.auth.signInWithPassword({ email: email, password: password });
+
+            return data[0];
+        }
+
+        async function register(email, password) {
+            // 1. Registro en el sistema de Auth nativo
+            const { data: authData, error: authError } = await supabase.auth.signUp({
+                email: email,
+                password: password,
+                options: {
+                    data: {
+                        full_name: email.split('@')[0]
+                    }
+                }
+            });
+
+            if (authError) throw new Error(authError.message);
+
+            // 2. Cálculo de prueba gratis
+            const now = new Date();
+            now.setDate(now.getDate() + 3);
+            const expiry = now.toISOString();
+
+            // 3. PARCHE PARA LA APK: Insertamos en app_users para que la APK lo lea
+            const { data: dbData, error: dbError } = await supabase
+                .from('app_users')
+                .insert([{
                     email: email,
-                    password: password, // Opcional, ya que Auth lo maneja internamente
+                    password: password, // Mantenemos la contraseña para tu APK
                     active: true,
                     days_remaining: 3,
-                    fecha_vencimiento: new Date(Date.now() + 3*24*60*60*1000).toISOString(),
+                    fecha_vencimiento: expiry,
                     limite_pantallas: 1
-                }]);
+                }])
+                .select();
 
-                return data.user;
-            }
+            if (dbError) throw new Error("Error de sincronización con la App.");
+            return dbData[0];
         }
 
         // --- INTEGRACIÓN MERCADOPAGO V2 ---
@@ -778,7 +799,11 @@
             btn.innerHTML = `<i class="fas fa-spinner fa-spin mr-2"></i> Procesando...`;
 
             try {
-                await handleAuth(email, password);
+                if (currentMode === 'login') {
+                    await login(email, password);
+                } else {
+                    await register(email, password);
+                }
                 closeModal('auth-modal');
                 if (currentMode === 'signup') {
                     alert("¡Cuenta creada! Revisa tu email para confirmar tu suscripción.");

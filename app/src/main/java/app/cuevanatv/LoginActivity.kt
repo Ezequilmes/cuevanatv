@@ -70,7 +70,7 @@ class LoginActivity : FragmentActivity() {
                 if (token.isNullOrEmpty()) {
                     info.text = "Login fallido. Verifica credenciales."
                 } else {
-                    Auth.saveToken(this@LoginActivity, token)
+                    Auth.saveSession(this@LoginActivity, token, e, true)
                     startActivity(Intent(this@LoginActivity, MainActivity::class.java))
                     finish()
                 }

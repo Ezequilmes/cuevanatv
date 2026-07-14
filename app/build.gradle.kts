@@ -1,6 +1,6 @@
 plugins {
-    id("com.android.application") version "8.5.0"
-    id("org.jetbrains.kotlin.android") version "1.9.24"
+    alias(libs.plugins.androidApplication)
+    alias(libs.plugins.kotlinAndroid)
 }
 
 android {
@@ -26,8 +26,8 @@ android {
         versionCode = 4
         versionName = "1.3"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        val supabaseUrl = System.getenv("SUPABASE_URL") ?: ""
-        val supabaseAnonKey = System.getenv("SUPABASE_ANON_KEY") ?: ""
+        val supabaseUrl = project.findProperty("supabase_url") ?: System.getenv("SUPABASE_URL") ?: ""
+        val supabaseAnonKey = project.findProperty("supabase_anon_key") ?: System.getenv("SUPABASE_ANON_KEY") ?: ""
         buildConfigField("String", "SUPABASE_URL", "\"$supabaseUrl\"")
         buildConfigField("String", "SUPABASE_ANON_KEY", "\"$supabaseAnonKey\"")
     }
@@ -45,6 +45,7 @@ android {
 
     buildFeatures {
         viewBinding = true
+        buildConfig = true
     }
 
     compileOptions {

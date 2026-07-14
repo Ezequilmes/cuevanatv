@@ -1,6 +1,7 @@
 # Android/Gradle
 .gradle/
 **/build/
+.build/
 .idea/
 local.properties
 *.iml
@@ -8,11 +9,30 @@ local.properties
 *.ipr
 *.jks
 *.keystore
+keystore.properties
 
-# Node/Vite admin panel
+# Node/Web/Admin
+node_modules/
 admin-panel/node_modules/
 admin-panel/dist/
 admin-panel/.env
+dist/
+out/
+
+# Claude/Internal tools
+.claude/
+.mcp.json
+
+# Environment and Secrets
+.env
+.env.example
+!.env.example
+SmsTwilioVerifyAccountSid
+SmsTwilioVerifyAccountSid.pub
+.wwebjs_auth/
+.wwebjs_cache/
+**/ .wwebjs_auth/
+**/ .wwebjs_cache/
 
 # OS/Editors
 .DS_Store
@@ -20,7 +40,20 @@ Thumbs.db
 *.swp
 *.swo
 
-# Logs
+# Logs and Binaries
+*.log
+hs_err_pid*
+replay_pid*
 npm-debug.log*
 yarn-error.log*
+err.txt
+out.txt
+output.txt
+server_log.txt
+*.apk
+*.zip
+captura.png
+extracted_apk/
 
+# Miscellaneous ignore
+scripts/RESPALDO/

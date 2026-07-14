@@ -1,0 +1,152 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#000000"
+    android:padding="32dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Ajustes de CuevanaTV"
+            android:textColor="#FFFFFF"
+            android:textSize="24sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="24dp" />
+
+        <!-- FILA 1: CUENTA -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:weightSum="3"
+            android:layout_marginBottom="16dp">
+
+            <androidx.cardview.widget.CardView
+                android:id="@+id/card_profile"
+                style="@style/SettingsCardStyle">
+                <LinearLayout style="@style/SettingsCardInternalStyle">
+                    <ImageView android:src="@drawable/ic_settings_user" style="@style/SettingsIconStyle" android:contentDescription="Perfil"/>
+                    <TextView android:id="@+id/tvUserEmail" android:text="Cargando..." style="@style/SettingsTitleStyle"/>
+                    <TextView android:id="@+id/tvUserStatus" android:text="Plan VIP Ilimitado" style="@style/SettingsSubTitleStyle"/>
+                </LinearLayout>
+            </androidx.cardview.widget.CardView>
+
+            <androidx.cardview.widget.CardView
+                android:id="@+id/card_payment_status"
+                style="@style/SettingsCardStyle">
+                <LinearLayout style="@style/SettingsCardInternalStyle">
+                    <ImageView android:src="@drawable/qr_activacion" style="@style/SettingsIconStyle" android:contentDescription="Pago"/>
+                    <TextView android:text="Estado de Pago" style="@style/SettingsTitleStyle"/>
+                    <TextView android:id="@+id/tvExpiryDate" android:text="Consultar Vencimiento" style="@style/SettingsSubTitleStyle"/>
+                </LinearLayout>
+            </androidx.cardview.widget.CardView>
+
+            <androidx.cardview.widget.CardView
+                android:id="@+id/card_support"
+                style="@style/SettingsCardStyle">
+                <LinearLayout style="@style/SettingsCardInternalStyle">
+                    <ImageView android:src="@drawable/ic_settings_logout" style="@style/SettingsIconStyle" app:tint="#25D366" android:contentDescription="Soporte"/>
+                    <TextView android:text="Soporte" style="@style/SettingsTitleStyle"/>
+                    <TextView android:text="Ayuda WhatsApp" style="@style/SettingsSubTitleStyle"/>
+                </LinearLayout>
+            </androidx.cardview.widget.CardView>
+        </LinearLayout>
+
+        <!-- FILA 2: CATÁLOGO Y PLAYERS -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:weightSum="3"
+            android:layout_marginBottom="16dp">
+
+            <androidx.cardview.widget.CardView
+                android:id="@+id/btnCheckUpdates"
+                style="@style/SettingsCardStyle">
+                <LinearLayout style="@style/SettingsCardInternalStyle">
+                    <ImageView android:src="@drawable/ic_settings_sync" style="@style/SettingsIconStyle"/>
+                    <TextView android:text="Sincronizar" style="@style/SettingsTitleStyle"/>
+                    <TextView android:text="Actualizar Catálogo" style="@style/SettingsSubTitleStyle"/>
+                </LinearLayout>
+            </androidx.cardview.widget.CardView>
+
+            <androidx.cardview.widget.CardView
+                android:id="@+id/card_player_choice"
+                style="@style/SettingsCardStyle">
+                <LinearLayout style="@style/SettingsCardInternalStyle">
+                    <ImageView android:src="@drawable/ic_play_foreground" style="@style/SettingsIconStyle"/>
+                    <TextView android:text="Reproductor" style="@style/SettingsTitleStyle"/>
+                    <TextView android:id="@+id/tvCurrentPlayer" android:text="VLC (Defecto)" style="@style/SettingsSubTitleStyle"/>
+                </LinearLayout>
+            </androidx.cardview.widget.CardView>
+
+            <androidx.cardview.widget.CardView
+                android:id="@+id/card_streaming_quality"
+                style="@style/SettingsCardStyle">
+                <LinearLayout style="@style/SettingsCardInternalStyle">
+                    <ImageView android:src="@drawable/ic_settings_sync" style="@style/SettingsIconStyle"/>
+                    <TextView android:text="Calidad" style="@style/SettingsTitleStyle"/>
+                    <TextView android:text="FHD 1080p" style="@style/SettingsSubTitleStyle"/>
+                </LinearLayout>
+            </androidx.cardview.widget.CardView>
+        </LinearLayout>
+
+        <!-- FILA 3: SISTEMA -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:weightSum="3">
+
+            <androidx.cardview.widget.CardView
+                android:id="@+id/card_clean_cache"
+                style="@style/SettingsCardStyle">
+                <LinearLayout style="@style/SettingsCardInternalStyle">
+                    <ImageView android:src="@drawable/ic_settings_logout" style="@style/SettingsIconStyle"/>
+                    <TextView android:text="Limpiar Caché" style="@style/SettingsTitleStyle"/>
+                    <TextView android:text="Resetear Memoria" style="@style/SettingsSubTitleStyle"/>
+                </LinearLayout>
+            </androidx.cardview.widget.CardView>
+
+            <androidx.cardview.widget.CardView
+                android:id="@+id/card_parental_control"
+                style="@style/SettingsCardStyle">
+                <LinearLayout style="@style/SettingsCardInternalStyle">
+                    <ImageView android:src="@drawable/ic_settings_user" style="@style/SettingsIconStyle"/>
+                    <TextView android:text="Parental" style="@style/SettingsTitleStyle"/>
+                    <TextView android:text="Acceso Niños" style="@style/SettingsSubTitleStyle"/>
+                </LinearLayout>
+            </androidx.cardview.widget.CardView>
+
+            <androidx.cardview.widget.CardView
+                android:id="@+id/card_speed_test"
+                style="@style/SettingsCardStyle">
+                <LinearLayout style="@style/SettingsCardInternalStyle">
+                    <ImageView android:src="@drawable/ic_settings_sync" style="@style/SettingsIconStyle"/>
+                    <TextView android:text="Test de Red" style="@style/SettingsTitleStyle"/>
+                    <TextView android:text="Medir Conexión" style="@style/SettingsSubTitleStyle"/>
+                </LinearLayout>
+            </androidx.cardview.widget.CardView>
+        </LinearLayout>
+
+        <!-- Versión (No Enfocable) -->
+        <TextView
+            android:id="@+id/tvVersion"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="32dp"
+            android:layout_gravity="center"
+            android:textColor="#555555"
+            android:focusable="false"
+            android:clickable="false"
+            android:text="Cargando versión..." />
+
+    </LinearLayout>
+</ScrollView>

@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#141414"
+    android:gravity="center"
+    android:orientation="vertical"
+    android:padding="40dp">
+
+    <TextView
+        android:id="@+id/tvStatus"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Tu cuenta está pendiente de activación"
+        android:textColor="#FFFFFF"
+        android:textSize="28sp"
+        android:textStyle="bold"
+        android:layout_marginBottom="30dp"
+        android:gravity="center"/>
+
+    <ImageView
+        android:id="@+id/ivQr"
+        android:layout_width="300dp"
+        android:layout_height="300dp"
+        android:layout_marginBottom="30dp"
+        android:contentDescription="Código QR de activación"
+        android:scaleType="fitCenter"
+        android:src="@drawable/qr_activacion" />
+
+    <TextView
+        android:id="@+id/tvInstruction"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Escanea el código para contactar al administrador"
+        android:textColor="#CCCCCC"
+        android:textSize="20sp"
+        android:layout_marginBottom="40dp"
+        android:gravity="center"/>
+
+    <Button
+        android:id="@+id/btnBackToLogin"
+        android:layout_width="300dp"
+        android:layout_height="wrap_content"
+        android:text="VOLVER AL LOGIN"
+        android:textColor="#FFFFFF"
+        android:backgroundTint="#E50914"
+        android:padding="15dp"
+        android:textSize="18sp"
+        android:focusable="true"
+        android:nextFocusUp="@id/btnBackToLogin"
+        android:nextFocusDown="@id/btnBackToLogin"/>
+
+</LinearLayout>

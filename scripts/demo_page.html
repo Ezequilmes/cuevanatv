@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta property="og:image" content="https://example.com/poster.jpg" />
+    <title>Demo</title>
+    <style>
+      body { font-family: sans-serif; padding: 24px; }
+      img { max-width: 320px; display: block; margin-bottom: 12px; }
+    </style>
+  </head>
+  <body>
+    <h1>Demo Item</h1>
+    <img src="https://example.com/poster.jpg" alt="Poster" />
+    <button class="play-video" type="button">Play</button>
+    <div id="player"></div>
+    <script>
+      document.querySelector(".play-video").addEventListener("click", () => {
+        const player = document.getElementById("player");
+        player.innerHTML = "";
+        const iframe = document.createElement("iframe");
+        iframe.src = "https://example.com/embed/abc";
+        iframe.width = "560";
+        iframe.height = "315";
+        player.appendChild(iframe);
+      });
+    </script>
+  </body>
+</html>

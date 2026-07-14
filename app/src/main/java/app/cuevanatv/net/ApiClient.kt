@@ -7,16 +7,13 @@ import app.cuevanatv.model.ServerItem
 import app.cuevanatv.model.VideoItem
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 
 class ApiClient(private val context: Context) {
     private val client = OkHttpClient()
-    private val json = "application/json; charset=utf-8".toMediaType()
 
     private fun baseUrl(): String = BuildConfig.SUPABASE_URL
     private fun anonKey(): String = BuildConfig.SUPABASE_ANON_KEY
@@ -25,33 +22,42 @@ class ApiClient(private val context: Context) {
 
     suspend fun login(email: String, password: String): String? = withContext(Dispatchers.IO) {
         if (baseUrl().isEmpty() || anonKey().isEmpty()) return@withContext null
-        val body = JSONObject()
-            .put("email", email)
-            .put("password", password)
-            .toString()
-            .toRequestBody(json)
+        
+        // Consultamos la tabla 'app_users' directamente via REST API
+        val url = "$restUrl/app_users?email=eq.$email&password=eq.$password&select=email,active"
         val req = Request.Builder()
-            .url("$authUrl/token?grant_type=password")
+            .url(url)
             .addHeader("apikey", anonKey())
-            .addHeader("Content-Type", "application/json")
-            .post(body)
+            .addHeader("Authorization", "Bearer ${anonKey()}")
+            .get()
             .build()
+            
         client.newCall(req).execute().use { resp ->
             if (!resp.isSuccessful) return@withContext null
-            val obj = JSONObject(resp.body?.string() ?: return@withContext null)
-            obj.optString("access_token", null)
+            val body = resp.body?.string() ?: return@withContext null
+            val arr = JSONArray(body)
+            if (arr.length() > 0) {
+                val user = arr.getJSONObject(0)
+                if (user.optBoolean("active", false)) {
+                    // Retornamos el email como "token" para identificar la sesión, 
+                    // ya que la tabla app_users no usa Supabase Auth (JWT)
+                    return@withContext email
+                }
+            }
+            null
         }
     }
 
     suspend fun getFeed(token: String): List<VideoItem> = withContext(Dispatchers.IO) {
         val result = mutableListOf<VideoItem>()
         if (baseUrl().isEmpty() || anonKey().isEmpty()) return@withContext result
+        // Usamos poster_url que es el nombre real en la tabla titles
         val url =
-            "$restUrl/titles?select=id,title,posterUrl&published=eq.true&order=createdAt.desc.nullslast"
+            "$restUrl/titles?select=id,title,poster_url&published=eq.true&order=created_at.desc.nullslast"
         val req = Request.Builder()
             .url(url)
             .addHeader("apikey", anonKey())
-            .addHeader("Authorization", "Bearer $token")
+            .addHeader("Authorization", "Bearer ${anonKey()}")
             .get()
             .build()
         client.newCall(req).execute().use { resp ->
@@ -61,13 +67,17 @@ class ApiClient(private val context: Context) {
                 val o = arr.getJSONObject(i)
                 val id = o.optString("id")
                 val title = o.optString("title")
-                val poster = o.optString("posterUrl")
+                val poster = o.optString("poster_url")
+                val type = o.optString("type", "movie")
+                val category = o.optString("category", "")
                 if (id.isNotEmpty() && title.isNotEmpty()) {
                     result.add(
                         VideoItem(
                             title = title,
                             imageUrl = poster,
-                            streamUrl = "api://title/$id"
+                            streamUrl = "api://title/$id",
+                            type = type,
+                            category = category
                         )
                     )
                 }
@@ -80,12 +90,13 @@ class ApiClient(private val context: Context) {
         if (baseUrl().isEmpty() || anonKey().isEmpty()) {
             return@withContext MovieDetails("No disponible", emptyList())
         }
+        // Usamos los nombres reales de la tabla: playable_url en lugar de playableUrl
         val url =
-            "$restUrl/titles?id=eq.$id&select=id,title,description,servers(name,playableUrl,pageUrl,priority)"
+            "$restUrl/titles?id=eq.$id&select=id,title,description,servers(name,playable_url,priority)"
         val req = Request.Builder()
             .url(url)
             .addHeader("apikey", anonKey())
-            .addHeader("Authorization", "Bearer $token")
+            .addHeader("Authorization", "Bearer ${anonKey()}")
             .get()
             .build()
         client.newCall(req).execute().use { resp ->
@@ -99,9 +110,8 @@ class ApiClient(private val context: Context) {
             for (i in 0 until sArr.length()) {
                 val s = sArr.getJSONObject(i)
                 val name = s.optString("name", "Servidor")
-                val playable = s.optString("playableUrl", "")
-                val page = s.optString("pageUrl", "")
-                val urlUse = if (playable.isNotEmpty()) playable else if (page.isNotEmpty()) page else null
+                val playable = s.optString("playable_url", "")
+                val urlUse = if (playable.isNotEmpty()) playable else null
                 servers.add(ServerItem(name, urlUse, null))
             }
             MovieDetails(description, servers)

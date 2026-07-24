@@ -656,73 +656,44 @@
         });
 
         async function syncUserData(authUser) {
-            // Buscamos los metadatos extendidos en la tabla app_users
+            // Consultamos la tabla app_users para obtener los datos de la suscripción
             const { data: userData, error } = await supabase
                 .from('app_users')
                 .select('*')
-                .eq('email', authUser.email)
+                .eq('id', authUser.id)
                 .single();
+
+            if (error) {
+                console.error("Error al sincronizar datos:", error.message);
+                // Si falla, mostramos datos básicos de auth
+                updateUI({ email: authUser.email, active: false, days_remaining: 0 });
+                return;
+            }
 
             if (userData) {
                 updateUI(userData);
-            } else {
-                // Fallback si el trigger no ha corrido todavía
-                updateUI({ email: authUser.email, active: false, days_remaining: 0 });
             }
         }
 
-        // --- AUTENTICACIÓN HÍBRIDA (COMPATIBLE CON APK) ---
+        // --- AUTENTICACIÓN OPTIMIZADA ---
         async function login(email, password) {
-            // 1. Intentamos loguear con la tabla app_users original para compatibilidad con la APK
-            const { data, error } = await supabase
-                .from('app_users')
-                .select('*')
-                .eq('email', email)
-                .eq('password', password);
+            const { data, error } = await supabase.auth.signInWithPassword({
+                email: email,
+                password: password
+            });
 
             if (error) throw error;
-            if (!data || data.length === 0) throw new Error("Credenciales inválidas o usuario no existe.");
-
-            // 2. Logueo silencioso en Auth para sesión web
-            await supabase.auth.signInWithPassword({ email: email, password: password });
-
-            return data[0];
+            return data.user;
         }
 
         async function register(email, password) {
-            // 1. Registro en el sistema de Auth nativo
-            const { data: authData, error: authError } = await supabase.auth.signUp({
+            const { data, error } = await supabase.auth.signUp({
                 email: email,
-                password: password,
-                options: {
-                    data: {
-                        full_name: email.split('@')[0]
-                    }
-                }
+                password: password
             });
 
-            if (authError) throw new Error(authError.message);
-
-            // 2. Cálculo de prueba gratis
-            const now = new Date();
-            now.setDate(now.getDate() + 3);
-            const expiry = now.toISOString();
-
-            // 3. PARCHE PARA LA APK: Insertamos en app_users para que la APK lo lea
-            const { data: dbData, error: dbError } = await supabase
-                .from('app_users')
-                .insert([{
-                    email: email,
-                    password: password, // Mantenemos la contraseña para tu APK
-                    active: true,
-                    days_remaining: 3,
-                    fecha_vencimiento: expiry,
-                    limite_pantallas: 1
-                }])
-                .select();
-
-            if (dbError) throw new Error("Error de sincronización con la App.");
-            return dbData[0];
+            if (error) throw error;
+            return data.user;
         }
 
         // --- INTEGRACIÓN MERCADOPAGO V2 ---

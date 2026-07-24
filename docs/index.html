@@ -395,7 +395,7 @@
             <div class="grid md:grid-cols-2 gap-4">
                 <div class="bg-black/50 p-4 rounded-xl border border-white/5 hover:border-netflix/50 transition-colors"><span class="text-white font-bold block mb-1 text-lg">1. Ajustes</span> Ve a Configuración > Aplicaciones.</div>
                 <div class="bg-black/50 p-4 rounded-xl border border-white/5 hover:border-netflix/50 transition-colors"><span class="text-white font-bold block mb-1 text-lg">2. Acceso Especial</span> Buscá "Instalar apps desconocidas".</div>
-                <div class="bg-black/50 p-4 rounded-xl border border-white/5 hover:border-netflix/50 transition-colors"><span class="text-white font-bold block mb-1 text-lg">3. Activar</span> Seleccioná la app que ue usar (Downloader) y ponelo en ON.</div>
+                <div class="bg-black/50 p-4 rounded-xl border border-white/5 hover:border-netflix/50 transition-colors"><span class="text-white font-bold block mb-1 text-lg">3. Activar</span> Seleccioná la app que vas a usar (Downloader) y ponela en ON.</div>
                 <div class="bg-black/50 p-4 rounded-xl border border-white/5 hover:border-netflix/50 transition-colors"><span class="text-white font-bold block mb-1 text-lg">4. Desarrollador</span> Si no aparece, pulsá 7 veces en "Compilación" en Información del sistema.</div>
             </div>
         </div>
@@ -629,10 +629,11 @@
         // CONFIGURACIÓN GLOBAL
         const SUPABASE_URL = "https://hflcacrgwxszejlkcxsh.supabase.co";
         const SUPABASE_ANON_KEY = "sb_publishable_JmQBsLcvMBc-vFn0-lAXIg_3pQLaip7";
-        const MP_PUBLIC_KEY = "APP_USR-f349d97a-9769-42b7-8321-7290076a5992"; // SUSTITUIR POR TU CLAVE REAL
+        const MP_PUBLIC_KEY = "APP_USR-f349d97a-9769-42b7-8321-7290076a5992";
 
         // Inicialización de Clientes
-        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        // Usamos supabaseClient para evitar conflictos con el objeto global 'supabase' de la librería CDN
+        const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
         const mp = new MercadoPago(MP_PUBLIC_KEY, { locale: 'es-AR' });
 
         let currentUser = null;
@@ -640,14 +641,14 @@
 
         // --- GESTIÓN DE SESIÓN PERSISTENTE ---
         async function checkSession() {
-            const { data: { session } } = await supabase.auth.getSession();
+            const { data: { session } } = await supabaseClient.auth.getSession();
             if (session) {
                 await syncUserData(session.user);
             }
         }
 
         // Escuchar cambios de estado en tiempo real
-        supabase.auth.onAuthStateChange(async (event, session) => {
+        supabaseClient.auth.onAuthStateChange(async (event, session) => {
             if (event === 'SIGNED_IN' && session) {
                 await syncUserData(session.user);
             } else if (event === 'SIGNED_OUT') {
@@ -656,8 +657,7 @@
         });
 
         async function syncUserData(authUser) {
-            // Consultamos la tabla app_users para obtener los datos de la suscripción
-            const { data: userData, error } = await supabase
+            const { data: userData, error } = await supabaseClient
                 .from('app_users')
                 .select('*')
                 .eq('id', authUser.id)
@@ -665,7 +665,6 @@
 
             if (error) {
                 console.error("Error al sincronizar datos:", error.message);
-                // Si falla, mostramos datos básicos de auth
                 updateUI({ email: authUser.email, active: false, days_remaining: 0 });
                 return;
             }
@@ -677,7 +676,7 @@
 
         // --- AUTENTICACIÓN OPTIMIZADA ---
         async function login(email, password) {
-            const { data, error } = await supabase.auth.signInWithPassword({
+            const { data, error } = await supabaseClient.auth.signInWithPassword({
                 email: email,
                 password: password
             });
@@ -687,7 +686,7 @@
         }
 
         async function register(email, password) {
-            const { data, error } = await supabase.auth.signUp({
+            const { data, error } = await supabaseClient.auth.signUp({
                 email: email,
                 password: password
             });
@@ -707,7 +706,6 @@
             btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Generando orden...';
 
             try {
-                // 1. Llamada al Backend (Supabase Edge Function) para crear la preferencia
                 const response = await fetch(`${SUPABASE_URL}/functions/v1/create-preference`, {
                     method: 'POST',
                     headers: {
@@ -724,7 +722,6 @@
                 const { preferenceId, error } = await response.json();
                 if (error || !preferenceId) throw new Error("No se pudo obtener el ID de pago.");
 
-                // 2. Abrir Checkout Pro
                 mp.checkout({
                     preference: { id: preferenceId },
                     autoOpen: true
@@ -736,6 +733,60 @@
             } finally {
                 btn.disabled = false;
                 btn.innerHTML = originalContent;
+            }
+        }
+
+        // --- PANEL DE ADMINISTRACIÓN ---
+        async function openAdminPanel() {
+            if (!currentUser || currentUser.email !== 'mazzera@hot.com') return;
+            
+            const tbody = document.getElementById('admin-user-list');
+            tbody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-gray-400">Cargando usuarios...</td></tr>';
+            
+            document.getElementById('admin-modal').classList.replace('hidden', 'flex');
+
+            const { data: users, error } = await supabaseClient
+                .from('app_users')
+                .select('*');
+
+            if (error) {
+                tbody.innerHTML = `<tr><td colspan="4" class="text-center py-4 text-netflix">Error al cargar usuarios: ${error.message}</td></tr>`;
+                return;
+            }
+
+            if (!users || users.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-gray-400">No hay usuarios registrados.</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = users.map(u => `
+                <tr class="border-b border-white/5 hover:bg-white/5">
+                    <td class="py-4 px-4 font-bold text-white">${u.email || u.id}</td>
+                    <td class="py-4 px-4 text-gray-400">${u.days_remaining || 0} días</td>
+                    <td class="py-4 px-4">
+                        <span class="px-2 py-1 rounded text-xs font-bold ${u.active ? 'bg-green-500/20 text-green-400' : 'bg-netflix/20 text-netflix'}">
+                            ${u.active ? 'Activo' : 'Vencido'}
+                        </span>
+                    </td>
+                    <td class="py-4 px-4 text-right">
+                        <button onclick="toggleUserStatus('${u.id}', ${!u.active})" class="bg-white/10 hover:bg-white/20 text-white px-3 py-1 rounded text-xs font-bold transition-all">
+                            ${u.active ? 'Desactivar' : 'Activar'}
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        async function toggleUserStatus(userId, newActiveStatus) {
+            const { error } = await supabaseClient
+                .from('app_users')
+                .update({ active: newActiveStatus, days_remaining: newActiveStatus ? 30 : 0 })
+                .eq('id', userId);
+
+            if (error) {
+                alert("Error al actualizar usuario: " + error.message);
+            } else {
+                openAdminPanel();
             }
         }
 
@@ -788,7 +839,7 @@
         });
 
         function handleLogout() {
-            supabase.auth.signOut();
+            supabaseClient.auth.signOut();
             closeModal('dashboard-modal');
         }
 

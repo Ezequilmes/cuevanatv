@@ -701,8 +701,12 @@ async function scrapeAgenda() {
       return [];
     }
 
-    const eventos = rawEvents.map(e => {
+    const uniqueMap = new Map();
+
+    rawEvents.forEach(e => {
         const rawUrl = e.link || "";
+        if (!rawUrl || uniqueMap.has(rawUrl)) return;
+
         const playableUrl = rawUrl.replace('global1.php', 'global2.php');
 
         let channelName = "DIRECTO";
@@ -715,7 +719,7 @@ async function scrapeAgenda() {
             finalTitle = `${channelName} | ${finalTitle}`;
         }
 
-        return {
+        uniqueMap.set(rawUrl, {
           title: finalTitle,
           source_page_url: rawUrl,
           playable_url: playableUrl,
@@ -724,10 +728,11 @@ async function scrapeAgenda() {
           type: 'live',
           published: true,
           poster_url: `https://ui-avatars.com/api/?name=${encodeURIComponent(channelName)}&background=000&color=fff`
-        };
+        });
     });
 
-    console.log(`✅ [AGENDA] Encontrados ${eventos.length} eventos.`);
+    const eventos = Array.from(uniqueMap.values());
+    console.log(`✅ [AGENDA] Encontrados ${eventos.length} eventos únicos.`);
     return eventos;
   } catch (err) {
     console.error("🚫 Error en scrapeAgenda (JSON):", err.message);
@@ -1138,7 +1143,7 @@ app.post("/api/sync-agenda", async (req, res) => {
 });
 
 app.post("/api/sync-channels-247", async (req, res) => {
-  const { url } = req.body;
+  const { url } = req.body || {};
   try { res.json(await ejecutarSincronizacionCanales247(url)); } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

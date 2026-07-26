@@ -15,6 +15,9 @@ import { TelegramClient, Api } from "telegram";
 import { StringSession } from "telegram/sessions/index.js";
 import fs from 'fs';
 import multer from 'multer';
+import youtubedl from 'youtube-dl-exec';
+import { v4 as uuidv4 } from 'uuid';
+import axios from "axios";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -98,25 +101,73 @@ if (supabase) console.log("✅ Conexión con Supabase establecida correctamente.
 // GESTIÓN DE ERRORES Y LOGS CENTRALIZADA
 // =========================================================
 async function registrarError(error, contexto) {
-    console.error(`❌ ERROR en [${contexto}]:`, error.message);
+    console.error(`🚫 ERROR en [${contexto}]:`, error.message);
+    const logEntry = {
+        context: contexto,
+        message: error.message,
+        stack: error.stack,
+        timestamp: new Date().toISOString()
+    };
+
+    if (supabase) {
+        try {
+            const { error: insErr } = await supabase.from('system_logs').insert([logEntry]);
+            if (!insErr) return; // Éxito en Supabase
+        } catch (e) {
+            console.error("⚠️ Fallo crítico al guardar log en Supabase, usando respaldo local.");
+        }
+    }
+
+    // FALLBACK: Guardar en archivo local si Supabase no está disponible o falla
+    try {
+        fs.appendFileSync('logs_criticos_fallback.log', JSON.stringify(logEntry) + "\n");
+    } catch (fsErr) {
+        console.error("❌ Fallo total: No se pudo escribir ni el log local:", fsErr.message);
+    }
+}
+
+// NUEVO: ENDPOINT PARA LEER LOGS LOCALES
+app.get("/api/admin/local-logs", (req, res) => {
+    const logFile = 'logs_criticos_fallback.log';
+    if (!fs.existsSync(logFile)) return res.json([]);
+    try {
+        const content = fs.readFileSync(logFile, 'utf8');
+        const lines = content.trim().split("\n").filter(l => l.trim()).map(l => JSON.parse(l));
+        res.json(lines);
+    } catch (e) {
+        res.status(500).json({ error: "No se pudo leer el log local" });
+    }
+});
+
+
+// =========================================================
+// FUNCIÓN AUXILIAR: LOG DE SISTEMA (SOLUCIÓN 4)
+// =========================================================
+async function logSystemEvent(action, details, status = 'info') {
     if (!supabase) return;
     try {
-        await supabase.from('system_logs').insert([{
-            context: contexto,
-            message: error.message,
-            stack: error.stack,
+        console.log(`📝 [LOG] ${action}: ${details}`);
+        await supabase.from("system_logs").insert([{
+            context: action,
+            message: details,
             timestamp: new Date().toISOString()
         }]);
     } catch (e) {
-        console.error("⚠️ Fallo crítico al guardar log en Supabase:", e.message);
+        console.error("⚠️ Fallo al guardar log:", e.message);
     }
 }
 
 // =========================================================
-// UTILIDAD DE NORMALIZACIÓN DE URL (ESPECÍFICA APK)
+// UTILIDAD DE NORMALIZACIÓN DE URL (SOLUCIÓN 1 - PROTECCIÓN IPTV)
 // =========================================================
-function cleanUrl(rawUrl) {
+function cleanUrl(rawUrl, isLive = false) {
     if (!rawUrl) return "";
+
+    // Si contiene .m3u8 o es marcado como Live, preservamos el dominio original
+    if (rawUrl.toLowerCase().includes(".m3u8") || rawUrl.toLowerCase().includes(".m3u") || isLive) {
+        return rawUrl;
+    }
+
     try {
         // 1. Eliminar barras invertidas de Windows y espacios extra
         let processed = rawUrl.replace(/\\/g, '/').trim();
@@ -157,8 +208,8 @@ const BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
 const ACCEPT_LANGUAGE = "es-ES,es;q=0.9,en-US;q=0.8,en;q=0.7";
 const HEADLESS = process.env.HEADLESS !== "false";
 
-process.on("unhandledRejection", (r) => { console.error("❌ unhandledRejection:", r); });
-process.on("uncaughtException", (e) => { console.error("❌ uncaughtException:", e); });
+process.on("unhandledRejection", (r) => { console.error("🚫 unhandledRejection:", r); });
+process.on("uncaughtException", (e) => { console.error("🚫 uncaughtException:", e); });
 
 // =========================================================
 // ENDPOINT: DIFUSIÓN MASIVA TELEGRAM
@@ -196,7 +247,7 @@ async function generarImagenIA(prompt) {
         // Modelo 'flux' vía Pollinations (Gratis y alta calidad)
         const urlIA = `https://image.pollinations.ai/p/${promptSanitizado}?model=flux&width=1024&height=1024&enhance=true`;
 
-        console.log(`🤖 Solicitando imagen por IA para: "${prompt}"...`);
+        console.log(`🚀 Solicitando imagen por IA para: "${prompt}"...`);
         const response = await fetch(urlIA);
         if (!response.ok) throw new Error("Error en la respuesta del servidor de IA");
 
@@ -249,14 +300,14 @@ app.post("/api/admin/generate-and-broadcast", async (req, res) => {
                     const delay = Math.floor(Math.random() * (75000 - 45000 + 1) + 45000);
                     await new Promise(r => setTimeout(r, delay));
                 } catch (err) {
-                    console.error(`❌ Error enviando imagen IA a ${id}:`, err.message);
+                    console.error(`🚫 Error enviando imagen IA a ${id}:`, err.message);
                 }
             }
 
             // 3. Limpieza final
             if (fs.existsSync(localImagePath)) {
                 fs.unlinkSync(localImagePath);
-                console.log("🧹 Imagen temporal de la IA eliminada.");
+                console.log("🚀 Imagen temporal de la IA eliminada.");
             }
         })();
 
@@ -311,7 +362,7 @@ app.post("/api/telegram/guerrilla-broadcast", async (req, res) => {
             }
             const randomDelay = Math.floor(Math.random() * (75000 - 45000 + 1) + 45000);
             await new Promise(resolve => setTimeout(resolve, randomDelay));
-        } catch (err) { console.error(`❌ Error guerrilla a ${id}:`, err.message); }
+        } catch (err) { console.error(`🚫 Error guerrilla a ${id}:`, err.message); }
     }
 });
 
@@ -335,7 +386,7 @@ app.post("/api/admin/broadcast-image", upload.single("imagen"), async (req, res)
         await userbot.sendFile(id, { file: file.path, caption: message, parseMode: 'html' });
         const delay = Math.floor(Math.random() * (75000 - 45000 + 1) + 45000);
         await new Promise(r => setTimeout(r, delay));
-      } catch (err) { console.error(`❌ Error broadcast-image a ${id}:`, err.message); }
+      } catch (err) { console.error(`🚫 Error broadcast-image a ${id}:`, err.message); }
     }
     fs.unlinkSync(file.path); // Limpieza final
     console.log("✅ Broadcast de imagen finalizado y archivo temporal borrado.");
@@ -371,7 +422,7 @@ app.post("/api/admin/broadcast-users", async (req, res) => {
 
           const delay = Math.floor(Math.random() * (5000 - 2000 + 1) + 2000);
           await new Promise(r => setTimeout(r, delay));
-        } catch (err) { console.error(`❌ Error notificando a ${user.email}:`, err.message); }
+        } catch (err) { console.error(`🚫 Error notificando a ${user.email}:`, err.message); }
       }
       console.log("✅ Notificación masiva finalizada.");
     })();
@@ -422,7 +473,7 @@ async function limpiarCanalesViejos(categoria, urlsActivas) {
 
         if (idsParaBorrar.length > 0) {
             await supabase.from("titles").delete().in("id", idsParaBorrar);
-            console.log(`🧹 LIMPIEZA SUPABASE: Se borraron ${idsParaBorrar.length} canales caídos de '${categoria}'.`);
+            console.log(`🚀 LIMPIEZA SUPABASE: Se borraron ${idsParaBorrar.length} canales caídos de '${categoria}'.`);
         }
     } catch (e) {
         console.error(`⚠️ Error limpiando '${categoria}':`, e.message);
@@ -456,7 +507,7 @@ async function extractorTvLibr3(url) {
     }).catch(() => null);
 
     if (!iframeSrc) {
-        try { await page.locator('text=/Opci[oó]n 1/i').first().click({ timeout: 5000 }); } catch(e) {}
+        try { await page.locator('text=/Opci[oón] 1/i').first().click({ timeout: 5000 }); } catch(e) {}
         await page.waitForTimeout(2000);
         iframeSrc = await page.evaluate(() => {
             const iframe = document.querySelector('div#dontfoid iframe, .player iframe');
@@ -492,7 +543,7 @@ async function extractorTvLibr3(url) {
 
   try { return await withTimeout(logic(), SCRAPER_HARD_TIMEOUT, "extractorTvLibr3"); }
   catch (err) {
-    console.error(`❌ Error en extractorTvLibr3 para ${url}:`, err.message);
+    console.error(`🚫 Error en extractorTvLibr3 para ${url}:`, err.message);
     return { source_page_url: url, title: "Error de Carga", description: "", iframe_srcs: [], m3u8_links: [], playable_url: "" };
   }
   finally { if (browser) await browser.close().catch(() => {}); }
@@ -535,9 +586,6 @@ async function ejecutarSincronizacionTvLibr3() {
   finally { if (browser) await browser.close().catch(() => {}); }
 }
 
-// =========================================================
-// MÓDULO: CANALES ARGENTINOS (TVLIBRE-ONLINE.COM) - Lógica de Agenda
-// =========================================================
 // =========================================================
 // MÓDULO: CANALES ARGENTINOS (NUEVO: TELELIBREE.COM)
 // =========================================================
@@ -618,7 +666,7 @@ async function ejecutarSincronizacionCanalesArgentinos() {
     if (!supabase) return { success: false, error: "Supabase no conectado." };
 
     if (canales.length > 0) {
-      console.log(`📤 Subiendo Canales Argentinos a Supabase (${canales.length} canales)...`);
+      console.log(`🚀 Subiendo Canales Argentinos a Supabase (${canales.length} canales)...`);
       const { error } = await supabase.from("titles").upsert(canales, { onConflict: "source_page_url" });
       if (error) throw error;
 
@@ -639,90 +687,52 @@ async function ejecutarSincronizacionCanalesArgentinos() {
 // TAREA 1: EXTRACCIÓN DE AGENDA (INFALIBLE)
 // =========================================================
 async function scrapeAgenda() {
-  const url = "https://streamtp.sbs/eventos.html";
-  let browser = null;
-
-  const logic = async () => {
-    console.log(`[1/4] 🚀 Iniciando extractor avanzado de Agenda...`);
-    browser = await chromium.launch({
-        headless: process.env.HEADLESS === 'false' ? false : true,
-        args: ['--start-maximized', '--no-sandbox', '--disable-setuid-sandbox']
+  const url = "https://streamtp99a.sbs/eventos.json";
+  try {
+    console.log(`🚀 [AGENDA] Descargando JSON desde: ${url}`);
+    const response = await axios.get(url, {
+        timeout: 15000,
+        headers: { 'User-Agent': BROWSER_UA }
     });
-    const context = await browser.newContext({ userAgent: BROWSER_UA });
-    const page = await context.newPage();
 
-    try {
-        console.log(`[2/4] 🌐 Navegando a: ${url}`);
-        await page.goto(url, { waitUntil: "domcontentloaded", timeout: 25000 });
-        await page.waitForTimeout(5000);
-
-        console.log(`[3/4] 🔍 Leyendo inputs de enlace y atributos ocultos...`);
-
-        const eventos = await page.evaluate(() => {
-          const results = [];
-          const seenUrls = new Set();
-
-          const inputsLinks = document.querySelectorAll('input.iframe-link');
-
-          inputsLinks.forEach(input => {
-            const rawUrl = input.value.trim();
-            if (!rawUrl || seenUrls.has(rawUrl)) return;
-            seenUrls.add(rawUrl);
-
-            const playableUrl = rawUrl.replace('global1.php', 'global2.php');
-
-            const eventoContenedor = input.closest('.event, .match-item, tr');
-            let eventName = "";
-
-            if (eventoContenedor) {
-                eventName = eventoContenedor.getAttribute('data-title') || "";
-            }
-
-            const itemEnlaceContenedor = input.closest('.event-link-item, .card-body, tr');
-            let channelName = "DIRECTO";
-
-            if (itemEnlaceContenedor) {
-                const badgeServer = itemEnlaceContenedor.querySelector('.badge-server, span.meta-badge.badge-server');
-                if (badgeServer) {
-                    channelName = badgeServer.textContent.replace(/FHD|HD|MX|"/gi, '').trim().toUpperCase();
-                }
-            }
-
-            eventName = eventName.replace(/EN VIVO|LIVE|VER|ESPAÑOL|1080P/gi, '').replace(/\s+/g, ' ').trim();
-
-            let finalTitle = channelName;
-            if (eventName && eventName.length > 3 && eventName.toUpperCase() !== channelName.toUpperCase()) {
-                finalTitle = `${channelName} | ${eventName}`;
-            }
-
-            results.push({
-              title: finalTitle,
-              source_page_url: rawUrl,
-              playable_url: playableUrl,
-              is_live: true,
-              category: 'Eventos Deportivos',
-              type: 'live',
-              published: true,
-              poster_url: `https://ui-avatars.com/api/?name=${encodeURIComponent(channelName)}&background=000&color=fff`
-            });
-          });
-          return results;
-        });
-
-        console.log(`[4/4] ✅ Extracción finalizada: Encontrados ${eventos.length} eventos en vivo.`);
-        return eventos;
-    } finally {
-        await page.close().catch(() => {});
-        await context.close().catch(() => {});
+    const rawEvents = response.data;
+    if (!Array.isArray(rawEvents)) {
+      console.warn("⚠️ [AGENDA] Formato JSON no válido.");
+      return [];
     }
-  };
 
-  try { return await withTimeout(logic(), SCRAPER_HARD_TIMEOUT, "scrapeAgenda"); }
-  catch (err) {
-    await registrarError(err, "scrapeAgenda");
+    const eventos = rawEvents.map(e => {
+        const rawUrl = e.link || "";
+        const playableUrl = rawUrl.replace('global1.php', 'global2.php');
+
+        let channelName = "DIRECTO";
+        if (e.status && e.status.toUpperCase() !== 'EN VIVO') {
+            channelName = e.status.toUpperCase();
+        }
+
+        let finalTitle = e.title || "Evento sin título";
+        if (channelName !== 'DIRECTO' && channelName !== 'EN VIVO') {
+            finalTitle = `${channelName} | ${finalTitle}`;
+        }
+
+        return {
+          title: finalTitle,
+          source_page_url: rawUrl,
+          playable_url: playableUrl,
+          is_live: true,
+          category: 'Eventos Deportivos',
+          type: 'live',
+          published: true,
+          poster_url: `https://ui-avatars.com/api/?name=${encodeURIComponent(channelName)}&background=000&color=fff`
+        };
+    });
+
+    console.log(`✅ [AGENDA] Encontrados ${eventos.length} eventos.`);
+    return eventos;
+  } catch (err) {
+    console.error("🚫 Error en scrapeAgenda (JSON):", err.message);
     return [];
   }
-  finally { if (browser) await browser.close().catch(() => {}); }
 }
 
 async function ejecutarSincronizacionAgenda() {
@@ -731,7 +741,7 @@ async function ejecutarSincronizacionAgenda() {
     if (!supabase) return { success: false, error: "Supabase no conectado." };
 
     if (eventos.length > 0) {
-      console.log(`📤 Subiendo agenda a Supabase (${eventos.length} partidos)...`);
+      console.log(`🚀 Subiendo agenda a Supabase (${eventos.length} partidos)...`);
       const { error } = await supabase.from("titles").upsert(eventos, { onConflict: "source_page_url" });
       if (error) throw error;
 
@@ -751,57 +761,65 @@ async function ejecutarSincronizacionAgenda() {
 // TAREA 2: EXTRACCIÓN AUTOMÁTICA DE CANALES 24/7
 // =========================================================
 async function scrapeCanalesRoot(urlObjetivo) {
-  const url = urlObjetivo || "https://streamtp.sbs/";
-  let browser = null;
+  const baseUrl = "https://streamtp99a.sbs";
+  const url = urlObjetivo || `${baseUrl}/`;
 
-  const logic = async () => {
-    console.log(`[1/4] 🚀 Iniciando nuevo scraper 24/7 en: ${url}`);
-    browser = await chromium.launch({
-        headless: process.env.HEADLESS === 'false' ? false : true,
-        args: ['--start-maximized', '--no-sandbox', '--disable-setuid-sandbox']
+  try {
+    console.log(`🚀 [24/7] Iniciando scraper en: ${url}`);
+    const response = await axios.get(url, {
+        timeout: 15000,
+        headers: { 'User-Agent': BROWSER_UA }
     });
-    const context = await browser.newContext({ userAgent: BROWSER_UA });
-    const page = await context.newPage();
 
-    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 20000 });
-    await page.waitForTimeout(4000);
+    const html = response.data;
+    const channelsMatch = html.match(/const\s+channels\s*=\s*({[\s\S]*?});/);
 
-    const canales = await page.evaluate(() => {
-      const results = [];
-      const bloquesCanales = Array.from(document.querySelectorAll('div.card-body, .card, div.channel-card, li, .col-md-3'));
+    if (!channelsMatch) {
+        console.warn("⚠️ [24/7] No se encontró el objeto 'channels' en el HTML.");
+        return [];
+    }
 
-      bloquesCanales.forEach(bloque => {
-        const hElement = bloque.querySelector('h2, h1, h3, .channel-title');
-        const textoTarjeta = bloque.innerText.toUpperCase();
-        const estaActivo = textoTarjeta.includes('ACTIVO') || bloque.querySelector('.status-active, .green-dot');
-        const linkBtn = bloque.querySelector('a');
+    const channelMap = {};
+    const entryRegex = /'([^']+)':\s*'([^']+)'/g;
+    let entry;
+    while ((entry = entryRegex.exec(channelsMatch[1])) !== null) {
+        channelMap[entry[1]] = entry[2].replace('streamtp-x-y-z.ws', 'streamtp99a.sbs');
+    }
 
-        if (hElement && linkBtn && estaActivo) {
-          let title = hElement.textContent.replace('●', '').replace('Activo', '').replace('Inactivo', '').trim();
-          let rawUrl = linkBtn.href ? linkBtn.href.trim() : null;
+    const statusRes = await axios.get(`${baseUrl}/status.json`, { timeout: 10000 });
+    const statusList = Array.isArray(statusRes.data) ? statusRes.data : [];
 
-          if (rawUrl && rawUrl.includes('http') && !rawUrl.includes('eventos.html')) {
-            results.push({
-              title: title,
-              source_page_url: rawUrl,
-              playable_url: rawUrl.replace('global1.php', 'global2.php'),
-              is_live: true,
-              category: 'Canales 24/7',
-              type: 'live',
-              published: true,
-              poster_url: `https://ui-avatars.com/api/?name=${encodeURIComponent(title)}&background=000&color=fff`
-            });
-          }
-        }
-      });
-      return results;
-    });
-    return canales;
-  };
+    const resultados = [];
+    for (const [title, rawUrl] of Object.entries(channelMap)) {
+        try {
+            const urlObj = new URL(rawUrl);
+            const streamId = urlObj.searchParams.get('stream');
+            if (!streamId) continue;
 
-  try { return await withTimeout(logic(), SCRAPER_HARD_TIMEOUT, "scrapeCanalesRoot"); }
-  catch (err) { console.error("❌ Error en Scraper 24/7:", err.message); return []; }
-  finally { if (browser) await browser.close().catch(() => {}); }
+            const canalStatus = statusList.find(s => s.Canal.toLowerCase() === streamId.toLowerCase());
+            const estaActivo = canalStatus && canalStatus.Estado === 'Activo';
+
+            if (estaActivo) {
+                resultados.push({
+                  title: title,
+                  source_page_url: rawUrl,
+                  playable_url: rawUrl.replace('global1.php', 'global2.php'),
+                  is_live: true,
+                  category: 'Canales 24/7',
+                  type: 'live',
+                  published: true,
+                  poster_url: `https://ui-avatars.com/api/?name=${encodeURIComponent(title)}&background=000&color=fff`
+                });
+            }
+        } catch (e) { continue; }
+    }
+
+    console.log(`✅ [24/7] Encontrados ${resultados.length} canales activos.`);
+    return resultados;
+  } catch (err) {
+    console.error("🚫 Error en scrapeCanalesRoot (JSON):", err.message);
+    return [];
+  }
 }
 
 async function ejecutarSincronizacionCanales247(urlObjetivo = null) {
@@ -810,7 +828,7 @@ async function ejecutarSincronizacionCanales247(urlObjetivo = null) {
     if (!supabase) return { success: false, error: "Supabase no conectado." };
 
     if (canalesActivos.length > 0) {
-      console.log(`📤 Sincronizando ${canalesActivos.length} canales con Supabase...`);
+      console.log(`🚀 Sincronizando ${canalesActivos.length} canales con Supabase...`);
       const { error: upsertError } = await supabase.from("titles").upsert(canalesActivos, { onConflict: "source_page_url" });
       if (upsertError) throw upsertError;
 
@@ -822,7 +840,7 @@ async function ejecutarSincronizacionCanales247(urlObjetivo = null) {
       await limpiarCanalesViejos("Canales 24/7", []);
     }
     return { success: true, count: 0 };
-  } catch (err) { console.error("❌ Error Sync 24/7:", err.message); return { success: false, error: err.message }; }
+  } catch (err) { console.error("🚫 Error Sync 24/7:", err.message); return { success: false, error: err.message }; }
 }
 
 // =========================================================
@@ -1003,7 +1021,7 @@ app.post("/api/get-feed", async (req, res) => {
 
     res.json(formattedFeed);
   } catch (err) {
-    console.error("❌ Error en /api/get-feed:", err.message);
+    console.error("🚫 Error en /api/get-feed:", err.message);
     res.status(500).json({ error: err.message });
   }
 });
@@ -1020,7 +1038,7 @@ app.post("/api/reset-and-sync-series", async (req, res) => {
 
     try {
         console.log("-------------------------------------------------------");
-        console.log("🧹 PASO 1: Limpiando base de datos (Categoría: Series)...");
+        console.log("🚀 PASO 1: Limpiando base de datos (Categoría: Series)...");
 
         const { error: delError } = await supabase
             .from('titles')
@@ -1076,7 +1094,7 @@ app.post("/api/reset-and-sync-series", async (req, res) => {
                 .select()
                 .single();
 
-            if (titleError) { console.error(`❌ Error título ${showName}:`, titleError.message); continue; }
+            if (titleError) { console.error(`🚫 Error título ${showName}:`, titleError.message); continue; }
 
             const serversPayload = episodes.map(ep => {
                 // FIX SENIOR: Eliminamos el prefijo /Principal/ para que mapee directo a D:\pelis
@@ -1103,7 +1121,7 @@ app.post("/api/reset-and-sync-series", async (req, res) => {
                     ignoreDuplicates: false
                 });
 
-            if (serverError) console.error(`❌ Error capítulos ${showName}:`, serverError.message);
+            if (serverError) console.error(`🚫 Error capítulos ${showName}:`, serverError.message);
             else totalCreated++;
         }
 
@@ -1136,6 +1154,130 @@ app.post("/api/sync-canales-argentinos", async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+// =========================================================
+// TAREA PRO: SINCRONIZACIÓN IPTV ARGENTINA (IPTV-ORG) - V2 SIN UPSERT
+// =========================================================
+async function sincronizarIptvArgentina(urlM3U = "https://iptv-org.github.io/iptv/countries/ar.m3u") {
+    console.log(`🚀 [IPTV] Iniciando sincronización desde: ${urlM3U}`);
+
+    try {
+        const response = await fetch(urlM3U);
+        if (!response.ok) throw new Error("No se pudo descargar la lista M3U");
+        const text = await response.text();
+
+        // 1. Parsear M3U (Regex Senior mejorado)
+        const lines = text.split('\n');
+        const rawChannels = [];
+        let currentTemp = null;
+
+        for (const line of lines) {
+            const cleanLine = line.trim();
+            if (cleanLine.startsWith('#EXTINF:')) {
+                // Buscamos el nombre después de la última coma
+                const nameMatch = cleanLine.match(/,(.+)$/);
+                // Buscamos el logo con comillas
+                const logoMatch = cleanLine.match(/tvg-logo="([^"]+)"/);
+
+                currentTemp = {
+                    title: nameMatch ? nameMatch[1].trim() : "Canal Desconocido",
+                    poster_url: logoMatch ? logoMatch[1] : ""
+                };
+            } else if (cleanLine.startsWith('http') && currentTemp) {
+                currentTemp.playable_url = cleanLine;
+                rawChannels.push(currentTemp);
+                currentTemp = null;
+            }
+        }
+
+        console.log(`🔍 [IPTV] Detectados ${rawChannels.length} canales en el M3U. Validando streams (Batch de 15, Timeout 4s)...`);
+
+        // 2. Validación de Streams en Paralelo (Batch de 15 para mayor velocidad)
+        const validChannels = [];
+        const batchSize = 15;
+
+        for (let i = 0; i < rawChannels.length; i += batchSize) {
+            const batch = rawChannels.slice(i, i + batchSize);
+            const results = await Promise.allSettled(batch.map(async (ch) => {
+                const controller = new AbortController();
+                const timeout = setTimeout(() => controller.abort(), 4000);
+                try {
+                    // Usamos GET con rango pequeño para validar streams que rechazan HEAD (común en M3U8)
+                    const res = await fetch(ch.playable_url, {
+                        method: 'GET',
+                        signal: controller.signal,
+                        headers: { 'Range': 'bytes=0-1' }
+                    });
+                    clearTimeout(timeout);
+                    if (res.ok || res.status === 206) return ch;
+                } catch (e) {}
+                clearTimeout(timeout);
+                return null;
+            }));
+
+            results.forEach(r => {
+                if (r.status === 'fulfilled' && r.value) validChannels.push(r.value);
+            });
+            console.log(`⏳ Progreso validación: ${Math.min(i + batchSize, rawChannels.length)}/${rawChannels.length}...`);
+        }
+
+        console.log(`✅ [IPTV] ${validChannels.length} canales están ONLINE. Sincronizando con Supabase (SELECT -> INSERT/UPDATE)...`);
+
+        // 3. Inserción Segura sin Depender de UNIQUE Constraint
+        let processedCount = 0;
+        for (const ch of validChannels) {
+            try {
+                // Verificar si el canal ya existe por título y tipo live
+                const { data: existing } = await supabase
+                    .from('titles')
+                    .select('id')
+                    .eq('title', ch.title)
+                    .eq('type', 'live')
+                    .maybeSingle();
+
+                if (existing) {
+                    // Actualizamos la URL si ya existe
+                    await supabase
+                        .from('titles')
+                        .update({ playable_url: ch.playable_url, poster_url: ch.poster_url })
+                        .eq('id', existing.id);
+                } else {
+                    // Insertamos nuevo
+                    await supabase
+                        .from('titles')
+                        .insert([{
+                            title: ch.title,
+                            poster_url: ch.poster_url,
+                            playable_url: ch.playable_url,
+                            type: 'live',
+                            is_live: true,
+                            published: true,
+                            category: 'TV Argentina'
+                        }]);
+                }
+                processedCount++;
+            } catch (dbErr) {
+                console.warn(`⚠️ Error procesando canal ${ch.title}:`, dbErr.message);
+            }
+        }
+
+        return { success: true, count: processedCount };
+    } catch (err) {
+        console.error("🚫 [IPTV] Fallo crítico:", err.message);
+        throw err;
+    }
+}
+
+app.post("/api/admin/sync-iptv", async (req, res) => {
+    try {
+        const { playlistUrl } = req.body || {};
+        const result = await sincronizarIptvArgentina(playlistUrl);
+        res.json(result);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 
 // ENDPOINT: PUBLICACIÓN EN INSTAGRAM (PROXY AL MOTOR PYTHON PORT 5000)
 app.post("/api/instagram/publish", upload.single("image"), async (req, res) => {
@@ -1310,6 +1452,63 @@ function generarPromptDeportivo(informacionEvento, estiloVisual) {
 }
 
 // =========================================================
+// MÓDULO: MOTOR DE TEXTO IA (MULTI-PROVEEDOR ROBUSTO)
+// =========================================================
+async function fetchIA(systemPrompt, userMessage = "") {
+    const providers = [
+        {
+            name: "LLM7 (Principal)",
+            url: "https://api.llm7.io/v1/chat/completions",
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer unused' },
+            payload: (s, u) => ({ model: "fast", messages: [{ role: 'system', content: s }, { role: 'user', content: u || "Genera el contenido solicitado." }] }),
+            parser: (d) => d.choices?.[0]?.message?.content
+        },
+        {
+            name: "Pollinations (Respaldo)",
+            url: "https://text.pollinations.ai/openai",
+            headers: { 'Content-Type': 'application/json' },
+            payload: (s, u) => ({ model: "openai", messages: [{ role: 'system', content: s }, { role: 'user', content: u || "Genera el contenido solicitado." }] }),
+            parser: (d) => d.choices?.[0]?.message?.content
+        }
+    ];
+
+    let lastError = null;
+
+    for (const p of providers) {
+        try {
+            console.log(`📡 Solicitando IA a ${p.name}...`);
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s por proveedor
+
+            const res = await fetch(p.url, {
+                method: 'POST',
+                headers: p.headers,
+                body: JSON.stringify(p.payload(systemPrompt, userMessage)),
+                signal: controller.signal
+            });
+
+            clearTimeout(timeoutId);
+
+            if (res.ok) {
+                const data = await res.json();
+                const content = p.parser(data);
+                if (content && !content.includes("<!DOCTYPE html>")) {
+                    console.log(`✅ IA ${p.name} respondió con éxito.`);
+                    return content;
+                }
+            } else {
+                console.warn(`⚠️ IA ${p.name} devolvió status ${res.status}`);
+            }
+        } catch (e) {
+            console.warn(`❌ IA ${p.name} falló:`, e.message);
+            lastError = e;
+        }
+    }
+
+    throw lastError || new Error("Todos los proveedores de IA fallaron.");
+}
+
+// =========================================================
 // ENDPOINT: ENRIQUECIMIENTO DE PROMPTS CON IA (FLAGS + PLAYERS)
 // =========================================================
 app.post("/api/admin/enrich-prompt", async (req, res) => {
@@ -1319,7 +1518,7 @@ app.post("/api/admin/enrich-prompt", async (req, res) => {
     }
 
     try {
-        console.log(`🧠 Enriqueciendo prompt con IA Gratis (Pollinations) para: ${matchTitle} (${style})`);
+        console.log(`🧠 Enriqueciendo prompt con IA para: ${matchTitle} (${style})`);
 
         const systemPrompt = `Actúa como un experto en Ingeniería de Prompts para generación de imágenes (Stable Diffusion).
         Tu objetivo es crear un prompt altamente detallado en INGLÉS para un partido de fútbol: "${matchTitle}".
@@ -1329,20 +1528,15 @@ app.post("/api/admin/enrich-prompt", async (req, res) => {
         3. Describe jugadores estrella en pose heroica.
         4. Adapta la atmósfera al estilo: "${style}".
         5. OBLIGATORIO incluir al final: "Portrait orientation, 9:16 aspect ratio, cinematic lighting, hyper-realistic, 8k, photorealistic, NO TEXT, NO LETTERS, NO NUMBERS, EMPTY CENTER space for overlay".
-        Responde SOLO con el texto del prompt, sin introducciones.`;
+        Responde SOLO con el texto del prompt, sin introducciones ni comillas.`;
 
-        const pollinationsUrl = `https://text.pollinations.ai/${encodeURIComponent(systemPrompt)}`;
-        const response = await fetch(pollinationsUrl);
+        const enrichedPrompt = await fetchIA(systemPrompt);
 
-        if (!response.ok) throw new Error("IA Gratis no disponible");
-
-        const enrichedPrompt = await response.text();
-
-        console.log("✅ Prompt enriquecido generado con IA Gratis.");
+        console.log("✅ Prompt enriquecido generado.");
         res.json({ success: true, prompt: enrichedPrompt.trim() });
     } catch (err) {
-        console.error("❌ Error en IA Gratis (Enrich):", err.message);
-        res.status(500).json({ success: false, error: "Fallo al conectar con IA Gratis" });
+        console.error("🚫 Error en Enrich IA:", err.message);
+        res.status(500).json({ success: false, error: "Fallo al conectar con IA" });
     }
 });
 
@@ -1419,6 +1613,9 @@ app.get("/api/admin/health", async (req, res) => {
                 logs: logCount || 0,
                 titles: titleCount || 0
             },
+            config: {
+                cronAgenda: cronAgendaInterval
+            },
             env: {
                 headless: process.env.HEADLESS || "true",
                 port: PORT
@@ -1427,6 +1624,17 @@ app.get("/api/admin/health", async (req, res) => {
     } catch (err) {
         res.status(500).json({ status: "error", message: err.message });
     }
+});
+
+app.post("/api/admin/update-cron", (req, res) => {
+    const { interval } = req.body;
+    if (!interval || interval < 5) return res.status(400).json({ error: "Intervalo no válido (mínimo 5 min)" });
+
+    cronAgendaInterval = parseInt(interval);
+    setupCronTasks();
+
+    console.log(`✅ [CONFIG] Intervalo de cron actualizado a ${cronAgendaInterval} min.`);
+    res.json({ success: true, message: `Cron actualizado a ${cronAgendaInterval} minutos.` });
 });
 
 // =========================================================
@@ -1448,7 +1656,7 @@ app.post("/api/admin/update-apk-version", async (req, res) => {
         console.log(`✅ Actualización APK publicada: v${versionName} (${versionCode})`);
         res.json({ success: true, message: "Actualización publicada correctamente." });
     } catch (err) {
-        console.error("❌ Error al guardar update.json:", err.message);
+        console.error("🚫 Error al guardar update.json:", err.message);
         res.status(500).json({ error: "No se pudo guardar la versión." });
     }
 });
@@ -1479,6 +1687,8 @@ app.get("/api/admin/get-posters", async (req, res) => {
             .eq("published", true)
             .neq("type", "live")
             .or("is_live.is.null,is_live.eq.false")
+            .not("poster_url", "is", null)
+            .neq("poster_url", "")
             .order("created_at", { ascending: false });
 
         if (error) throw error;
@@ -1488,10 +1698,27 @@ app.get("/api/admin/get-posters", async (req, res) => {
     }
 });
 
-// Tareas Automatizadas mediante Cron
-cron.schedule('*/20 * * * *', async () => {
-    try { await ejecutarSincronizacionAgenda(); } catch (e) { await registrarError(e, "Cron: Sincronización Agenda"); }
-});
+// =========================================================
+// CONFIGURACIÓN DINÁMICA DE SCRAPERS (CRON)
+// =========================================================
+let cronAgendaInterval = 20; // Valor por defecto (minutos)
+let taskAgenda = null;
+
+function setupCronTasks() {
+    if (taskAgenda) taskAgenda.stop();
+
+    console.log(`⏰ [CRON] Configurando agenda cada ${cronAgendaInterval} minutos.`);
+    taskAgenda = cron.schedule(`*/${cronAgendaInterval} * * * *`, async () => {
+        try {
+            await ejecutarSincronizacionAgenda();
+        } catch (e) {
+            await registrarError(e, "Cron: Sincronización Agenda");
+        }
+    });
+}
+
+// Iniciar tareas al arrancar
+setupCronTasks();
 
 // AGREGADO CANALES ARGENTINOS AL CRON DE CADA 2 HORAS
 cron.schedule('0 */2 * * *', async () => {
@@ -1510,7 +1737,7 @@ cron.schedule('0 */6 * * *', async () => {
         const { data: nuevos } = await supabase.from('app_users').select('id, whatsapp, email').eq('bot_step', 'nuevo');
         for (const user of nuevos || []) {
             if (!user.whatsapp) continue;
-            const msg = `*¡Bienvenido a CuevanaTV!* 🎬\n\nGracias por registrarte. Ya tenés tus *3 días de prueba* activos.\n\n📥 *Instalación rápida:* Descargá la app "Downloader" en tu TV y poné el código: *2931858*.\n\n¿Pudiste instalarla bien? Cualquier duda avisame, che.`;
+            const msg = `*¡Bienvenido a CuevanaTV!* 🍿\n\nGracias por registrarte. Ya tenés tus *3 días de prueba* activos.\n\n🚀 *Instalación rápida:* Descargá la app "Downloader" en tu TV y poné el código: *2931858*.\n\n¿Pudiste instalarla bien? Cualquier duda avisame, che.`;
             await enviarMensajeConDelay(user.whatsapp, msg, user.email, 'bienvenida_enviada');
         }
 
@@ -1523,7 +1750,7 @@ cron.schedule('0 */6 * * *', async () => {
 
         const { data: vencidos } = await supabase.from('app_users').select('id, whatsapp, email').eq('days_remaining', 0).neq('bot_step', 'pago_solicitado');
         for (const user of vencidos || []) {
-            const msg = `*¡Tu prueba de CuevanaTV terminó!* 🍿\n\n¿Qué te pareció la calidad? Si querés seguir disfrutando de todo el catálogo sin cortes, el abono mensual es de *$5000 ARS*.\n\n💳 *Alias:* 34339356 (Ezequiel Mazzera)\n\n¡No te pierdas los estrenos de hoy! Mandame el comprobante por acá y te lo activo al toque.`;
+            const msg = `*¡Tu prueba de CuevanaTV terminó!* 🍿🎬\n\n¿Qué te pareció la calidad? Si querés seguir disfrutando de todo el catálogo sin cortes, el abono mensual es de *$5000 ARS*.\n\n💳 *Alias:* 34339356 (Ezequiel Mazzera)\n\n¡No te pierdas los estrenos de hoy! Mandame el comprobante por acá y te lo activo al toque.`;
             await enviarMensajeConDelay(user.whatsapp, msg, user.email, 'pago_solicitado');
         }
     } catch (e) { await registrarError(e, "Cron: Embudo Automático"); }
@@ -1583,17 +1810,12 @@ client.on('message', async (msg) => {
         console.log(`📩 Mensaje de ${userEmail}: ${msg.body}`);
         await registrarLogWhatsApp(userEmail, msg.body, 'entrante');
 
-        // CHAT CON IA GRATIS (Pollinations)
-        const systemPrompt = `Eres el asistente virtual de soporte de CuevanaTV.
+        // CHAT CON IA (fetchIA)
+        const systemPromptMsg = `Eres el asistente virtual de soporte de CuevanaTV.
         Tu objetivo es ayudar a instalar la app y motivar a pagar el abono mensual de $5000 ARS.
-        Responde de forma amable y directa. El usuario dijo: "${msg.body}"`;
+        Responde de forma amable y directa.`;
 
-        const pollinationsUrl = `https://text.pollinations.ai/${encodeURIComponent(systemPrompt)}`;
-        const response = await fetch(pollinationsUrl);
-
-        if (!response.ok) throw new Error("IA Gratis no disponible");
-
-        const aiResponse = await response.text();
+        const aiResponse = await fetchIA(systemPromptMsg, msg.body);
 
         const chatWa = await msg.getChat();
         await chatWa.sendStateTyping();
@@ -1629,10 +1851,9 @@ app.get("/api/admin/audit-links", async (req, res) => {
 
     try {
         console.log(`🔍 [AUDIT] Iniciando escaneo por lotes (Limit: ${limitCount})...`);
-        // FIX: Especificamos la relación titles!servers_titleId_fkey para evitar ambigüedad en Supabase
         const { data: episodes, error } = await supabase
             .from("servers")
-            .select("id, name, playable_url, titles!servers_titleId_fkey(title)")
+            .select("id, name, playable_url, titles!servers_titleId_fkey(title, is_live)")
             .order('id', { ascending: false })
             .limit(limitCount);
 
@@ -1645,11 +1866,57 @@ app.get("/api/admin/audit-links", async (req, res) => {
 
         const results = [];
         const auditTask = async (ep) => {
+            const url = ep.playable_url || "";
+            const isLive = ep.titles?.is_live || url.includes('.m3u8');
+
+            let linkStatus = "local_file";
+            if (!url) linkStatus = "missing";
+            else if (isLive) linkStatus = "live_stream";
+
+            // --- PROTECCIÓN LOOPBACK Y FALLO DE RED LOCAL ---
+            if (linkStatus === "local_file" && url.includes("cuevana-tv-arg.duckdns.org")) {
+                try {
+                    const urlObj = new URL(url);
+                    let cleanPathname = urlObj.pathname.replace(/^\/Principal\//i, '/');
+                    let relPath = decodeURIComponent(cleanPathname).replace(/^\//, '');
+
+                    let fileExists = false;
+                    for (const base of BASE_PATHS) {
+                        const fullPath = path.join(base, relPath.replace(/\//g, path.sep));
+                        if (fs.existsSync(fullPath)) {
+                            fileExists = true;
+                            break;
+                        }
+                    }
+
+                    return {
+                        id: ep.id,
+                        serie: ep.titles?.title || "Desconocida",
+                        capitulo: ep.name,
+                        status: fileExists ? "🟢 ONLINE (FS)" : "🔴 CAÍDO (FS)",
+                        url: url,
+                        link_status: linkStatus
+                    };
+                } catch (e) { /* fallback to fetch */ }
+            }
+
             const controller = new AbortController();
-            const id = setTimeout(() => controller.abort(), 5000); // 5s por link
+            const id = setTimeout(() => controller.abort(), 5000);
 
             try {
-                const response = await fetch(ep.playable_url, {
+                if (linkStatus === "live_stream" || linkStatus === "missing") {
+                    clearTimeout(id);
+                    return {
+                        id: ep.id,
+                        serie: ep.titles?.title || "Desconocida",
+                        capitulo: ep.name,
+                        status: url ? "🔍 IPTV / LIVE" : "🔴 VACÍO",
+                        url: url,
+                        link_status: linkStatus
+                    };
+                }
+
+                const response = await fetch(url, {
                     method: 'HEAD',
                     signal: controller.signal
                 });
@@ -1659,7 +1926,8 @@ app.get("/api/admin/audit-links", async (req, res) => {
                     serie: ep.titles?.title || "Desconocida",
                     capitulo: ep.name,
                     status: response.ok ? "🟢 ONLINE" : "🔴 CAÍDO",
-                    url: ep.playable_url
+                    url: url,
+                    link_status: linkStatus
                 };
             } catch (err) {
                 clearTimeout(id);
@@ -1668,7 +1936,8 @@ app.get("/api/admin/audit-links", async (req, res) => {
                     serie: ep.titles?.title || "Desconocida",
                     capitulo: ep.name,
                     status: "🔴 OFFLINE / TIMEOUT",
-                    url: ep.playable_url
+                    url: url,
+                    link_status: linkStatus
                 };
             }
         };
@@ -1679,20 +1948,17 @@ app.get("/api/admin/audit-links", async (req, res) => {
             const currentBatch = episodes.slice(i, i + batchSize);
             const batchResults = await Promise.all(currentBatch.map(auditTask));
             results.push(...batchResults);
-            console.log(`[AUDIT] Lote completado: ${results.length}/${episodes.length}`);
         }
 
         if (!completed) {
             completed = true;
             clearTimeout(globalTimeout);
-            console.log(`✅ [AUDIT] Finalizada con ${results.length} resultados.`);
             res.json(results);
         }
     } catch (err) {
         if (!completed) {
             completed = true;
             clearTimeout(globalTimeout);
-            console.error("❌ [AUDIT] Fallo crítico:", err.message);
             res.status(500).json({ error: err.message });
         }
     }
@@ -1725,7 +1991,7 @@ app.post("/api/admin/repair-link", async (req, res) => {
 
         const fixedUrl = urlObj.toString();
 
-        console.log(`🔧 [REPAIR] Individual: ${ep.playable_url} -> ${fixedUrl}`);
+        console.log(`🛠️ [REPAIR] Individual: ${ep.playable_url} -> ${fixedUrl}`);
 
         const { error: updateErr } = await supabase
             .from("servers")
@@ -1736,7 +2002,7 @@ app.post("/api/admin/repair-link", async (req, res) => {
 
         res.json({ success: true, fixedUrl });
     } catch (err) {
-        console.error("❌ [REPAIR] Error:", err.message);
+        console.error("🚫 [REPAIR] Error:", err.message);
         res.status(500).json({ error: err.message });
     }
 });
@@ -1782,7 +2048,7 @@ app.post("/api/admin/repair-all-links", async (req, res) => {
         console.log(`✅ [REPAIR-ALL] Finalizado. Total reparados: ${fixedCount}`);
         res.json({ success: true, count: fixedCount });
     } catch (err) {
-        console.error("❌ [REPAIR-ALL] Fallo crítico:", err.message);
+        console.error("🚫 [REPAIR-ALL] Fallo crítico:", err.message);
         res.status(500).json({ error: err.message });
     }
 });
@@ -1797,7 +2063,8 @@ app.post("/api/admin/integrity-audit", async (req, res) => {
         episodes_checked: 0,
         deleted_ghosts: 0,
         duplicates_removed: 0,
-        urls_fixed: 0
+        urls_fixed: 0,
+        live_preserved: 0
     };
 
     const BASE_PATHS = ["D:\\pelis", "E:\\Peliculas"];
@@ -1807,7 +2074,7 @@ app.post("/api/admin/integrity-audit", async (req, res) => {
         console.log("🚀 [INTEGRITY] Iniciando Auditoría Maestra...");
 
         // 1. CARGAR DATOS
-        const { data: movies } = await supabase.from("titles").select("id, title, playable_url, type").eq("published", true).neq("type", "series");
+        const { data: movies } = await supabase.from("titles").select("id, title, playable_url, type, is_live").eq("published", true).neq("type", "series");
         const { data: episodes } = await supabase.from("servers").select("id, name, playable_url, title_id");
 
         const allRecords = [
@@ -1827,6 +2094,15 @@ app.post("/api/admin/integrity-audit", async (req, res) => {
 
             try {
                 if (!record.playable_url) continue;
+
+                const isM3u8 = record.playable_url.toLowerCase().includes('.m3u8');
+                const isLive = record.type === 'live' || record.is_live === true;
+
+                // PROTECCIÓN IPTV
+                if (isM3u8 || isLive) {
+                    SUMMARY.live_preserved++;
+                    continue;
+                }
 
                 // A) TRADUCCIÓN A RUTA FÍSICA Y LIMPIEZA DE FANTASMAS
                 let url;
@@ -1909,7 +2185,7 @@ app.post("/api/admin/integrity-audit", async (req, res) => {
             await Promise.all(promises);
         }
 
-        console.log("✅ [INTEGRITY] Auditoría finalizada con éxito.");
+        await logSystemEvent("INTEGRIDAD", `Mantenimiento finalizado. Borrados: ${SUMMARY.deleted_ghosts}, Preservados: ${SUMMARY.live_preserved}`);
         res.json({ status: "success", summary: SUMMARY });
 
     } catch (err) {
@@ -2012,39 +2288,117 @@ app.get("/api/episodes", async (req, res) => {
 });
 
 /**
- * NUEVO: Generar Copy Viral para Marketing (IA GRATIS - Pollinations)
+ * NUEVO: Generar Copy Viral para Marketing (IA)
  */
 app.post("/api/admin/generate-viral-copy", async (req, res) => {
     const { title, category, type } = req.body;
     if (!title) return res.status(400).json({ error: "Título requerido" });
 
     try {
-        console.log(`🧠 Generando Copy Viral con IA Gratis para: ${title}`);
+        console.log(`🚀 Generando Copy Viral con IA para: ${title}`);
 
         const systemPrompt = `Actúa como experto en Marketing Viral para "CuevanaTV".
         Escribe un CAPTION y un HOOK potente para el contenido: "${title}" (${category}, ${type}).
         Instrucciones:
         1. Estilo Relatable/Pattern Interrupt.
         2. Español Latino.
-        3. Responde SOLO en formato JSON: {"hook": "...", "caption": "...", "hashtags": "#CuevanaTV #Viral ..."}.
-        4. Incluye siempre que descarguen la APK.
-        SIN MARKDOWN, SOLO EL JSON.`;
+        3. Responde SOLO en formato JSON puro: {"hook": "...", "caption": "...", "hashtags": "#CuevanaTV #Viral ..."}.
+        4. Incluye siempre que descarguen la APK de CuevanaTV.
+        SIN MARKDOWN, SIN INTRODUCCIONES, SIN TEXTO EXTRA. SOLO EL JSON.`;
 
-        const pollinationsUrl = `https://text.pollinations.ai/${encodeURIComponent(systemPrompt)}`;
-        const response = await fetch(pollinationsUrl);
+        const textResponse = await fetchIA(systemPrompt);
 
-        if (!response.ok) throw new Error("IA Gratis no disponible");
-
-        const textResponse = await response.text();
+        // VALIDACIÓN ROBUSTA (Evita el error JSON con HTML)
+        if (textResponse.trim().startsWith("<!DOCTYPE") || textResponse.includes("<html")) {
+            console.error("❌ La IA devolvió HTML en lugar de texto");
+            throw new Error("Respuesta de IA no válida (formato HTML)");
+        }
 
         // Limpieza de posibles tags de markdown si la IA los incluye
         const cleanJson = textResponse.replace(/```json|```/g, '').trim();
-        const viralData = JSON.parse(cleanJson);
+        let viralData;
+
+        try {
+            viralData = JSON.parse(cleanJson);
+        } catch (parseError) {
+            console.warn("⚠️ Fallo parseo JSON, intentando limpieza agresiva...");
+            // Intento de rescate si la IA puso texto antes del JSON
+            const jsonMatch = cleanJson.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+                viralData = JSON.parse(jsonMatch[0]);
+            } else {
+                throw parseError;
+            }
+        }
 
         res.json({ success: true, data: viralData });
     } catch (err) {
-        console.error("❌ Error en Viral Copy IA Gratis:", err.message);
-        res.status(500).json({ success: false, error: "Fallo al generar copy viral con IA Gratis" });
+        console.error("🚫 Error en Viral Copy IA:", err.message);
+        res.status(500).json({
+            success: false,
+            error: "Fallo al generar copy viral",
+            details: err.message,
+            fallback: {
+                hook: `¡No te pierdas ${title}! 🍿`,
+                caption: `¡Ya disponible en CuevanaTV! ${title} en la mejor calidad. Descarga la APK ahora. 🍿⚽🎬`,
+                hashtags: "#CuevanaTV #Estreno #Streaming #APK"
+            }
+        });
+    }
+});
+
+// =========================================================
+// MÓDULO: DESCARGA DE YOUTUBE EN MÁXIMA CALIDAD (1080p/4K)
+// =========================================================
+app.post("/api/youtube/download-high", async (req, res) => {
+    const { videoUrl } = req.body;
+
+    if (!videoUrl) {
+        return res.status(400).json({ error: "La URL del video de YouTube es obligatoria." });
+    }
+
+    // Usamos el directorio seguro de uploads que ya tienes configurado
+    const fileName = `yt_${uuidv4()}.mp4`;
+    const outputPath = path.join(uploadDir, fileName);
+
+    try {
+        console.log(`🚀 Iniciando descarga en máxima calidad para: ${videoUrl}`);
+
+        // yt-dlp buscará automáticamente el mejor video y el mejor audio y los unirá con ffmpeg
+        await youtubedl(videoUrl, {
+            format: 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+            output: outputPath,
+            mergeOutputFormat: 'mp4', // Fuerza la salida en .mp4
+            noWarnings: true,
+            preferFreeFormats: true,
+            addHeader: [
+                'referer:youtube.com',
+                `user-agent:${BROWSER_UA}` // Reutilizamos el User-Agent que ya definiste en tu entorno
+            ]
+        });
+
+        console.log(`✅ Video de YouTube descargado y procesado con éxito: ${outputPath}`);
+
+        // Responder con la ruta o iniciar el proceso que necesites (ej. subir a Supabase, enviar por Telegram)
+        res.json({
+            success: true,
+            message: "Descarga completada en máxima calidad.",
+            localPath: outputPath
+        });
+
+    } catch (error) {
+        // Aprovechamos tu sistema centralizado de logs
+        await registrarError(error, "Descarga YouTube Máxima Calidad");
+
+        // Limpieza en caso de fallo
+        if (fs.existsSync(outputPath)) {
+            fs.unlinkSync(outputPath);
+        }
+
+        res.status(500).json({
+            error: "Fallo al procesar el video de YouTube en alta calidad.",
+            details: error.message
+        });
     }
 });
 

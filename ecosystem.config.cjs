@@ -1,14 +1,21 @@
 module.exports = {
   apps: [
     {
+      name: "CloudflareTunnel",
+      script: "D:/magik/Mi app/Cuevanatv/cloudflared.exe",
+      args: "tunnel run --protocol http2 --token eyJhIjoiMTQyNGU3NWU0ODYwM2E2YjlkNWEyMjhkMDhiNjIxOWYiLCJ0IjoiMGIwZWZlZmItYzUyNi00ZmQ5LTljOTgtM2IxYmU0YzQwNWVmIiwicyI6IlpEa3hOemhrTlRNdFl6ZzNNaTAwTURJeUxUbGpNVGt0WTJVME1EZzRNbVV3WkRJMyJ9",
+      watch: false,
+      autorestart: true,
+      restart_delay: 5000
+    },
+    {
       name: "FileBrowser",
       script: "filebrowser.exe",
       args: "-a 127.0.0.1 -p 8085 -r D:\\pelis --noauth",
       cwd: "D:\\pelis",
       watch: false,
       autorestart: true,
-      restart_delay: 5000,
-      exp_backoff_restart_delay: 100
+      restart_delay: 5000
     },
     {
       name: "CaddyServer",
@@ -17,8 +24,7 @@ module.exports = {
       cwd: "D:\\pelis",
       watch: false,
       autorestart: true,
-      restart_delay: 5000,
-      exp_backoff_restart_delay: 100
+      restart_delay: 5000
     },
     {
       name: "BotMaestro",
@@ -27,8 +33,10 @@ module.exports = {
       cwd: "D:\\pelis",
       watch: false,
       autorestart: true,
-      restart_delay: 10000, // Mayor espera para red
-      exp_backoff_restart_delay: 100
+      restart_delay: 10000,
+      env: {
+        PYTHONIOENCODING: "utf-8"
+      }
     },
     {
       name: "SyncAPIServer",
@@ -37,18 +45,16 @@ module.exports = {
       cwd: "D:\\magik\\Mi app\\Cuevanatv\\scripts",
       watch: false,
       autorestart: true,
-      restart_delay: 5000,
-      exp_backoff_restart_delay: 100
+      restart_delay: 5000
     },
     {
       name: "AdminPanel",
-      script: "npm",
-      args: "run dev",
-      cwd: "D:\\magik\\Mi app\\Cuevanatv\\admin-panel",
+      script: "cmd.exe",
+      args: "/c start_admin.bat",
+      cwd: "D:\\magik\\Mi app\\Cuevanatv",
       watch: false,
       autorestart: true,
-      restart_delay: 5000,
-      exp_backoff_restart_delay: 100
+      restart_delay: 5000
     },
     {
       name: "InstagramReelsStudio",
@@ -58,7 +64,9 @@ module.exports = {
       watch: false,
       autorestart: true,
       restart_delay: 5000,
-      exp_backoff_restart_delay: 100
+      env: {
+        PYTHONIOENCODING: "utf-8"
+      }
     }
   ]
 };

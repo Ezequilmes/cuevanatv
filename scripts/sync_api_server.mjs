@@ -18,6 +18,7 @@ import multer from 'multer';
 import youtubedl from 'youtube-dl-exec';
 import { v4 as uuidv4 } from 'uuid';
 import axios from "axios";
+import net from "net";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -165,37 +166,41 @@ function cleanUrl(rawUrl, isLive = false) {
 
     // Si contiene .m3u8 o es marcado como Live, preservamos el dominio original
     if (rawUrl.toLowerCase().includes(".m3u8") || rawUrl.toLowerCase().includes(".m3u") || isLive) {
-        return rawUrl;
+        return rawUrl.replace('http://', 'https://'); // Forzamos HTTPS en lo posible
     }
 
+    const VIDEO_DOMAIN = "video.cuevanatv.store";
+
     try {
-        // 1. Eliminar barras invertidas de Windows y espacios extra
-        let processed = rawUrl.replace(/\\/g, '/').trim();
+        // 1. Decodificar posibles URLs doblemente codificadas (prevención de https%3A/)
+        let decoded = decodeURIComponent(rawUrl);
 
-        // 2. Eliminar prefijos de rutas físicas de Windows (D:\ o E:\)
-        processed = processed.replace(/^(D:|E:)\/pelis\//i, '');
-        processed = processed.replace(/^(D:|E:)\/Peliculas\//i, '');
+        // 2. Limpieza agresiva de dominios previos y protocolos
+        // Buscamos la última ocurrencia de un path que empiece por Principal, Peliculas, juegos o similares
+        // o simplemente limpiamos todo lo que parezca un dominio
+        let processed = decoded.replace(/\\/g, '/').trim();
+
+        // Removemos cualquier rastro de protocolo y dominio conocido (viejo o nuevo)
+        processed = processed.replace(/^https?:\/\/[^\/]+\//i, '');
+        processed = processed.replace(/^https?%3A\/\/[^\/]+\//i, '');
+
+        // 3. Limpieza de prefijos físicos y de carpetas base
+        processed = processed.replace(/^(D:|E:)\/(pelis|Peliculas)\//i, '');
         processed = processed.replace(/^(D:|E:)\//i, '');
+        processed = processed.replace(/^\/+/, '');
 
-        // 3. Si no es una URL absoluta, convertirla en una relativa al dominio base
-        let urlObj;
-        if (processed.startsWith('http')) {
-            urlObj = new URL(processed);
-        } else {
-            // Aseguramos que el path sea limpio antes de unir
-            processed = processed.replace(/^\/+/, '');
-            urlObj = new URL(`http://cuevana-tv-arg.duckdns.org/${processed}`);
-        }
+        // 4. Asegurar que no quede rastro de "Principal/" duplicado al inicio del path relativo
+        // (La lógica de construcción añadirá lo necesario si es una ruta local pura)
 
-        // 4. Forzar dominio y protocolo compatible con APK
-        urlObj.protocol = 'http:';
-        urlObj.hostname = 'cuevana-tv-arg.duckdns.org';
-        urlObj.port = '';
+        // 5. Construcción de URL final limpia
+        const urlObj = new URL(`https://${VIDEO_DOMAIN}/${processed}`);
 
-        // 5. Limpieza agresiva del path (Eliminar /Principal/ y normalizar segmentos)
-        let cleanPath = urlObj.pathname.replace(/^\/Principal\//i, '/');
+        // 6. Normalización final del pathname (sin duplicar /Principal/)
+        let cleanPath = urlObj.pathname;
         const segments = cleanPath.split('/').filter(s => s.length > 0);
-        urlObj.pathname = '/' + segments.map(s => encodeURIComponent(decodeURIComponent(s))).join('/');
+
+        // Si el primer segmento es "Principal", lo mantenemos, si no, lo dejamos como está
+        urlObj.pathname = '/' + segments.map(s => encodeURIComponent(s)).join('/');
 
         return urlObj.toString();
     } catch (e) {
@@ -207,6 +212,47 @@ function cleanUrl(rawUrl, isLive = false) {
 const BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36";
 const ACCEPT_LANGUAGE = "es-ES,es;q=0.9,en-US;q=0.8,en;q=0.7";
 const HEADLESS = process.env.HEADLESS !== "false";
+
+// =========================================================
+// CONFIGURACIÓN DE RUTAS LOCALES Y DOMINIO
+// =========================================================
+const BASE_PATHS = ["D:\\pelis", "E:\\Peliculas"];
+const MAIN_DOMAIN = "panel.cuevanatv.store";
+const VIDEO_DOMAIN = "video.cuevanatv.store";
+
+// =========================================================
+// UTILIDAD: BÚSQUEDA RECURSIVA DE ARCHIVOS EN DISCO
+// =========================================================
+function findLocalFile(relPath) {
+    const fileName = path.basename(relPath);
+    for (const base of BASE_PATHS) {
+        if (!fs.existsSync(base)) continue;
+        // 1. Intento directo (ruta original)
+        const directPath = path.join(base, relPath.replace(/\//g, path.sep));
+        if (fs.existsSync(directPath)) return directPath;
+
+        // 2. Búsqueda profunda (si se movió de carpeta)
+        try {
+            const found = searchFileRecursive(base, fileName);
+            if (found) return found;
+        } catch (e) {}
+    }
+    return null;
+}
+
+function searchFileRecursive(dir, targetName) {
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    for (const entry of entries) {
+        const fullPath = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+            const res = searchFileRecursive(fullPath, targetName);
+            if (res) return res;
+        } else if (entry.name.toLowerCase() === targetName.toLowerCase()) {
+            return fullPath;
+        }
+    }
+    return null;
+}
 
 process.on("unhandledRejection", (r) => { console.error("🚫 unhandledRejection:", r); });
 process.on("uncaughtException", (e) => { console.error("🚫 uncaughtException:", e); });
@@ -444,7 +490,7 @@ app.post("/api/create-user", async (req, res) => {
     const trialDate = new Date();
     trialDate.setDate(trialDate.getDate() + 3);
 
-    const { data: newUser, error: userError } = await supabase.from("app_users").insert([{ email, password, whatsapp: whatsapp || "", active: true, days_remaining: 3, fecha_vencimiento: trialDate.toISOString(), limite_pantallas: 1 }]).select().single();
+    const { data: newUser, error: userError } = await supabase.from("app_users").insert([{ email, password, whatsapp: whatsapp || "", active: true, days_remaining: 3, fecha_vencimiento: trialDate.toISOString(), limite_pantallas: 1 }]).select().maybeSingle();
     if (userError) throw userError;
 
     const { error: deviceError } = await supabase.from("user_devices").insert([{ user_id: newUser.id, device_id: deviceId, device_model: deviceModel || "Unknown Device" }]);
@@ -934,6 +980,8 @@ app.post("/api/get-feed", async (req, res) => {
   try {
     trackUserPresence(req);
 
+    const STATIC_DOMAIN = "video.cuevanatv.store";
+
     // DETECCIÓN DE VERSIÓN PARA ACTUALIZACIÓN FORZADA
     const appVersion = req.headers['x-app-version'] || req.body.version;
     const apkPath = "D:/pelis/apk/update.json";
@@ -957,7 +1005,7 @@ app.post("/api/get-feed", async (req, res) => {
             category: "SISTEMA",
             type: "live",
             is_live: true,
-            playable_url: "http://cuevana-tv-arg.duckdns.org/apk/app-release.apk"
+            playable_url: `https://${STATIC_DOMAIN}/apk/app-release.apk`
         }]);
     }
 
@@ -983,7 +1031,7 @@ app.post("/api/get-feed", async (req, res) => {
       // Normalizamos la URL principal del título
       const cleanedTitle = {
         ...title,
-        playable_url: cleanUrl(title.playable_url)
+        playable_url: cleanUrl(title.playable_url, title.is_live)
       };
 
       // Si es una serie, buscamos sus capítulos para anidarlos
@@ -1002,7 +1050,7 @@ app.post("/api/get-feed", async (req, res) => {
             uniqueEpisodesMap.set(key, {
               id: s.id,
               name: s.name || `Capítulo ${episode}`,
-              playable_url: cleanUrl(s.playable_url), // LIMPIEZA APLICADA AQUÍ
+              playable_url: cleanUrl(s.playable_url, false), // LIMPIEZA APLICADA AQUÍ
               season: season,
               episode: episode,
               episode_number: episode, // APK usa episode_number para la UI
@@ -1112,7 +1160,7 @@ app.post("/api/reset-and-sync-series", async (req, res) => {
                 return {
                     title_id: titleData.id,
                     name: `Capítulo ${ep.episode}`,
-                    playable_url: `http://cuevana-tv-arg.duckdns.org/${encodedPath}`,
+                    playable_url: `https://${MAIN_DOMAIN}/${encodedPath}`,
                     season_number: ep.season,
                     episode_number: ep.episode,
                     priority: 0
@@ -1605,30 +1653,106 @@ const PORT = process.env.PORT || 8787;
 // =========================================================
 // ENDPOINT: ESTADO DEL SISTEMA (HEARTBEAT)
 // =========================================================
+// =========================================================
+// ENDPOINT: ESTADO DEL SISTEMA (HEARTBEAT MEJORADO)
+// =========================================================
 app.get("/api/admin/health", async (req, res) => {
     try {
-        const { data: logCount } = await supabase.from('system_logs').select('id', { count: 'exact', head: true });
+        const checkPort = (port) => new Promise(resolve => {
+            const socket = new net.Socket();
+            socket.setTimeout(500);
+            socket.on('connect', () => { socket.destroy(); resolve(true); });
+            socket.on('error', () => resolve(false));
+            socket.on('timeout', () => resolve(false));
+            socket.connect(port, '127.0.0.1');
+        });
+
+        // Verificamos el túnel mediante una petición HTTP al dominio público
+        const checkTunnel = async () => {
+            try {
+                const start = Date.now();
+                // Usamos el propio servidor como referencia a través de Cloudflare
+                const response = await axios.get(`https://${MAIN_DOMAIN}/api/admin/local-logs`, {
+                    timeout: 5000,
+                    headers: { 'User-Agent': 'CuevanaTV-Monitor-Pro' }
+                });
+                return { status: "online", latency: `${Date.now() - start}ms` };
+            } catch (e) {
+                return { status: "offline", error: e.code || "CONNECTION_ERROR" };
+            }
+        };
+
+        const [apiPort, caddyPort, tunnelInfo] = await Promise.all([
+            checkPort(8787),
+            checkPort(80),
+            checkTunnel()
+        ]);
+
         const { data: titleCount } = await supabase.from('titles').select('id', { count: 'exact', head: true });
 
         res.json({
-            status: "online",
-            timestamp: new Date().toISOString(),
-            database: supabase ? "connected" : "error",
+            ecosystem: "Cloudflare Professional",
+            status: tunnelInfo.status === "online" ? "healthy" : "degraded",
+            infrastructure: {
+                api_local: apiPort ? "running" : "down",
+                video_server: caddyPort ? "running" : "down",
+                cloudflare_tunnel: tunnelInfo
+            },
             stats: {
-                logs: logCount || 0,
                 titles: titleCount || 0
             },
-            config: {
-                cronAgenda: cronAgendaInterval
-            },
-            env: {
-                headless: process.env.HEADLESS || "true",
-                port: PORT
-            }
+            timestamp: new Date().toISOString()
         });
     } catch (err) {
         res.status(500).json({ status: "error", message: err.message });
     }
+});
+
+// =========================================================
+// ENDPOINTS: GESTIÓN DE CONFIGURACIÓN FRP
+// =========================================================
+app.get("/api/admin/frpc-config", (req, res) => {
+    const configPath = path.resolve(__dirname, "../frpc.toml");
+    try {
+        if (fs.existsSync(configPath)) {
+            const content = fs.readFileSync(configPath, 'utf8');
+            res.json({ success: true, config: content });
+        } else {
+            res.status(404).json({ error: "Archivo frpc.toml no encontrado." });
+        }
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post("/api/admin/frpc-config", (req, res) => {
+    const { config } = req.body;
+    const configPath = path.resolve(__dirname, "../frpc.toml");
+    if (!config) return res.status(400).json({ error: "Contenido de configuración requerido." });
+
+    try {
+        fs.writeFileSync(configPath, config, 'utf8');
+        res.json({ success: true, message: "Configuración frpc.toml actualizada correctamente." });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post("/api/admin/master-restart", (req, res) => {
+    console.log("🔄 Iniciando REINICIO MAESTRO solicitado desde el panel...");
+    res.json({ success: true, message: "Iniciando secuencia de reinicio maestro. El servidor se desconectará momentáneamente." });
+
+    // Ejecutar en proceso separado y salir
+    const restartScript = path.resolve(__dirname, "restart_full_system.mjs");
+    const { spawn } = require('child_process');
+    spawn('node', [restartScript], {
+        detached: true,
+        stdio: 'ignore'
+    }).unref();
+
+    setTimeout(() => {
+        process.exit(0);
+    }, 2000);
 });
 
 app.post("/api/admin/update-cron", (req, res) => {
@@ -1839,12 +1963,14 @@ client.on('message', async (msg) => {
 // =========================================================
 // MÓDULO DE AUDITORÍA: VERIFICADOR DE ENLACES CAÍDOS (SENIOR V4 - BATCHED)
 // =========================================================
+// =========================================================
+// MÓDULO DE AUDITORÍA: VERIFICADOR DE ENLACES CAÍDOS (CORREGIDO PARA TÚNEL)
+// =========================================================
 app.get("/api/admin/audit-links", async (req, res) => {
     let completed = false;
     const isFullScan = req.query.full === 'true';
-    const limitCount = isFullScan ? 1000 : 40;
+    const limitCount = isFullScan ? 1000 : 50;
 
-    // Timeout global: 35s para escaneo rápido, 120s para escaneo total
     const timeoutMs = isFullScan ? 120000 : 35000;
     const globalTimeout = setTimeout(() => {
         if (!completed) {
@@ -1855,10 +1981,10 @@ app.get("/api/admin/audit-links", async (req, res) => {
     }, timeoutMs);
 
     try {
-        console.log(`🔍 [AUDIT] Iniciando escaneo por lotes (Limit: ${limitCount})...`);
+        console.log(`🔍 [AUDIT] Iniciando escaneo híbrido (Limit: ${limitCount})...`);
         const { data: episodes, error } = await supabase
             .from("servers")
-            .select("id, name, playable_url, titles!servers_titleId_fkey(title, is_live)")
+            .select("id, name, playable_url, title_id")
             .order('id', { ascending: false })
             .limit(limitCount);
 
@@ -1869,85 +1995,71 @@ app.get("/api/admin/audit-links", async (req, res) => {
             return res.json([]);
         }
 
-        const results = [];
+        // Cargamos los títulos manualmente para evitar error de ambigüedad en la relación (Supabase/PostgREST)
+        const titleIds = [...new Set(episodes.map(e => e.title_id))].filter(Boolean);
+        const { data: titlesData } = await supabase.from('titles').select('id, title, is_live').in('id', titleIds);
+        const titlesMap = Object.fromEntries((titlesData || []).map(t => [t.id, t]));
+
         const auditTask = async (ep) => {
+            const epTitle = titlesMap[ep.title_id];
             const url = ep.playable_url || "";
-            const isLive = ep.titles?.is_live || url.includes('.m3u8');
 
-            let linkStatus = "local_file";
-            if (!url) linkStatus = "missing";
-            else if (isLive) linkStatus = "live_stream";
+            // NORMALIZACIÓN AL VUELO PARA LA AUDITORÍA
+            // Si detectamos que la URL es vieja, la limpiamos virtualmente para el check
+            const isOld = url.includes('duckdns.org') || url.includes('localhost') || url.includes('127.0.0.1');
+            const effectiveUrl = isOld ? cleanUrl(url) : url;
 
-            // --- PROTECCIÓN LOOPBACK Y FALLO DE RED LOCAL ---
-            if (linkStatus === "local_file" && url.includes("cuevana-tv-arg.duckdns.org")) {
-                try {
-                    const urlObj = new URL(url);
-                    let cleanPathname = urlObj.pathname.replace(/^\/Principal\//i, '/');
-                    let relPath = decodeURIComponent(cleanPathname).replace(/^\//, '');
+            const isLive = epTitle?.is_live || effectiveUrl.includes('.m3u8') || effectiveUrl.includes('.m3u');
 
-                    let fileExists = false;
-                    for (const base of BASE_PATHS) {
-                        const fullPath = path.join(base, relPath.replace(/\//g, path.sep));
-                        if (fs.existsSync(fullPath)) {
-                            fileExists = true;
-                            break;
-                        }
-                    }
-
-                    return {
-                        id: ep.id,
-                        serie: ep.titles?.title || "Desconocida",
-                        capitulo: ep.name,
-                        status: fileExists ? "🟢 ONLINE (FS)" : "🔴 CAÍDO (FS)",
-                        url: url,
-                        link_status: linkStatus
-                    };
-                } catch (e) { /* fallback to fetch */ }
+            if (!effectiveUrl) {
+                return { id: ep.id, serie: epTitle?.title || "Desconocida", capitulo: ep.name, status: "🔴 VACÍO", type: "missing" };
             }
 
-            const controller = new AbortController();
-            const id = setTimeout(() => controller.abort(), 5000);
+            // Caso 1: Contenido Local (Verificación de disco directa)
+            if (!isLive && effectiveUrl.includes(VIDEO_DOMAIN)) {
+                try {
+                    const urlObj = new URL(effectiveUrl);
+                    const relPath = decodeURIComponent(urlObj.pathname).replace(/^\//, '');
+                    const exists = findLocalFile(relPath);
+                    return {
+                        id: ep.id,
+                        serie: epTitle?.title || "Desconocida",
+                        capitulo: ep.name,
+                        status: exists ? "🟢 DISCO OK" : "🔴 ARCHIVO PERDIDO",
+                        url: effectiveUrl,
+                        type: "local"
+                    };
+                } catch (e) {
+                    return { id: ep.id, status: "⚠️ URL ERROR", type: "local" };
+                }
+            }
 
-            try {
-                if (linkStatus === "live_stream" || linkStatus === "missing") {
+            // Caso 2: IPTV / Stream Externo (HTTP HEAD)
+            if (isLive) {
+                const controller = new AbortController();
+                const id = setTimeout(() => controller.abort(), 4000);
+                try {
+                    const response = await fetch(effectiveUrl, { method: 'HEAD', signal: controller.signal });
                     clearTimeout(id);
                     return {
                         id: ep.id,
-                        serie: ep.titles?.title || "Desconocida",
+                        serie: epTitle?.title || "Desconocida",
                         capitulo: ep.name,
-                        status: url ? "🔍 IPTV / LIVE" : "🔴 VACÍO",
-                        url: url,
-                        link_status: linkStatus
+                        status: response.ok ? "🟢 STREAM OK" : "🔴 STREAM DOWN",
+                        url: effectiveUrl,
+                        type: "live"
                     };
+                } catch (err) {
+                    clearTimeout(id);
+                    return { id: ep.id, status: "🔴 OFFLINE", url: effectiveUrl, type: "live" };
                 }
-
-                const response = await fetch(url, {
-                    method: 'HEAD',
-                    signal: controller.signal
-                });
-                clearTimeout(id);
-                return {
-                    id: ep.id,
-                    serie: ep.titles?.title || "Desconocida",
-                    capitulo: ep.name,
-                    status: response.ok ? "🟢 ONLINE" : "🔴 CAÍDO",
-                    url: url,
-                    link_status: linkStatus
-                };
-            } catch (err) {
-                clearTimeout(id);
-                return {
-                    id: ep.id,
-                    serie: ep.titles?.title || "Desconocida",
-                    capitulo: ep.name,
-                    status: "🔴 OFFLINE / TIMEOUT",
-                    url: url,
-                    link_status: linkStatus
-                };
             }
+
+            return { id: ep.id, status: "🔍 DESCONOCIDO", url: effectiveUrl, type: "unknown" };
         };
 
-        const batchSize = 5;
+        const batchSize = 10;
+        const results = [];
         for (let i = 0; i < episodes.length; i += batchSize) {
             if (completed) break;
             const currentBatch = episodes.slice(i, i + batchSize);
@@ -1969,7 +2081,7 @@ app.get("/api/admin/audit-links", async (req, res) => {
     }
 });
 
-// NUEVO: REPARADOR DE ENLACES (SENIOR V5 - NATIVE URL API)
+// NUEVO: REPARADOR DE ENLACES (CORREGIDO CON cleanUrl E INTELIGENCIA)
 app.post("/api/admin/repair-link", async (req, res) => {
     const { episodeId } = req.body;
     try {
@@ -1977,26 +2089,34 @@ app.post("/api/admin/repair-link", async (req, res) => {
             .from("servers")
             .select("*")
             .eq("id", episodeId)
-            .single();
+            .maybeSingle();
 
-        if (fetchErr || !ep) throw new Error("No se encontró el episodio");
+        if (fetchErr || !ep) {
+            return res.status(404).json({ error: "No se encontró el episodio" });
+        }
 
-        // FIX SENIOR: "Liberador de Barras" y eliminación de prefijo /Principal/
-        let rawUrl = decodeURIComponent(ep.playable_url);
-        const urlObj = new URL(rawUrl);
+        let fixedUrl = cleanUrl(ep.playable_url);
 
-        urlObj.protocol = 'http:';
-        urlObj.hostname = 'cuevana-tv-arg.duckdns.org';
-        urlObj.port = '';
+        try {
+            // Inteligencia: Intentar encontrar el archivo real si el path cambió
+            const urlObj = new URL(ep.playable_url);
+            let relPath = decodeURIComponent(urlObj.pathname.replace(/^\//, ''));
+            const localPath = findLocalFile(relPath);
+            if (localPath) {
+                for (const base of BASE_PATHS) {
+                    if (localPath.startsWith(base)) {
+                        const subRel = path.relative(base, localPath).replace(/\\/g, '/');
+                        const encoded = subRel.split('/').map(encodeURIComponent).join('/');
+                        fixedUrl = `https://${MAIN_DOMAIN}/${encoded}`;
+                        break;
+                    }
+                }
+            }
+        } catch (e) {}
 
-        // Limpiamos el pathname: eliminamos /Principal/ si existe y reconstruimos
-        let cleanPath = urlObj.pathname.replace(/^\/Principal\//i, '/');
-        const segments = cleanPath.split('/').filter(s => s.length > 0);
-        urlObj.pathname = '/' + segments.map(s => encodeURIComponent(s)).join('/');
+        if (!fixedUrl) throw new Error("No se pudo generar una URL válida");
 
-        const fixedUrl = urlObj.toString();
-
-        console.log(`🛠️ [REPAIR] Individual: ${ep.playable_url} -> ${fixedUrl}`);
+        console.log(`🛠️ [REPAIR] Individual Inteligente: ${ep.playable_url} -> ${fixedUrl}`);
 
         const { error: updateErr } = await supabase
             .from("servers")
@@ -2012,12 +2132,13 @@ app.post("/api/admin/repair-link", async (req, res) => {
     }
 });
 
-// NUEVO: REPARADOR MASIVO DE ENLACES (SENIOR V5 - BATCHED & ERROR PROTECTED)
+// NUEVO: REPARADOR MASIVO DE ENLACES (CORREGIDO E INTELIGENTE)
 app.post("/api/admin/repair-all-links", async (req, res) => {
     try {
-        console.log("🛠️ [REPAIR-ALL] Iniciando REPARACIÓN MASIVA V5...");
+        console.log("🛠️ [REPAIR-ALL] Iniciando REPARACIÓN INTELIGENTE V6...");
         const { data: episodes, error } = await supabase.from("servers").select("id, playable_url");
         if (error) throw error;
+        if (!episodes) return res.json({ success: true, count: 0 });
 
         let fixedCount = 0;
         const total = episodes.length;
@@ -2030,7 +2151,8 @@ app.post("/api/admin/repair-all-links", async (req, res) => {
                 try {
                     if (!ep.playable_url) return;
 
-                    const fixedUrl = cleanUrl(ep.playable_url);
+                    // NORMALIZACIÓN AGRESIVA
+                    let fixedUrl = cleanUrl(ep.playable_url);
 
                     if (fixedUrl && fixedUrl !== ep.playable_url) {
                         const { error: updErr } = await supabase
@@ -2041,7 +2163,6 @@ app.post("/api/admin/repair-all-links", async (req, res) => {
                         if (!updErr) fixedCount++;
                     }
                 } catch (itemError) {
-                    console.warn(`⚠️ [REPAIR-ALL] Saltando ID ${ep.id} por error de formato.`);
                     return;
                 }
             });
@@ -2071,9 +2192,6 @@ app.post("/api/admin/integrity-audit", async (req, res) => {
         urls_fixed: 0,
         live_preserved: 0
     };
-
-    const BASE_PATHS = ["D:\\pelis", "E:\\Peliculas"];
-    const TARGET_DOMAIN = "cuevana-tv-arg.duckdns.org";
 
     try {
         console.log("🚀 [INTEGRITY] Iniciando Auditoría Maestra...");

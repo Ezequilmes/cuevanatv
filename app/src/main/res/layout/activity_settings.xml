@@ -9,7 +9,8 @@
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="vertical">
+        android:orientation="vertical"
+        xmlns:app="http://schemas.android.com/apk/res-auto">
 
         <TextView
             android:layout_width="wrap_content"
@@ -30,7 +31,10 @@
 
             <androidx.cardview.widget.CardView
                 android:id="@+id/card_profile"
-                style="@style/SettingsCardStyle">
+                style="@style/SettingsCardStyle"
+                app:cardBackgroundColor="#1A1A1A"
+                app:cardCornerRadius="12dp"
+                app:cardElevation="4dp">
                 <LinearLayout style="@style/SettingsCardInternalStyle">
                     <ImageView android:src="@drawable/ic_settings_user" style="@style/SettingsIconStyle" android:contentDescription="Perfil"/>
                     <TextView android:id="@+id/tvUserEmail" android:text="Cargando..." style="@style/SettingsTitleStyle"/>
@@ -40,7 +44,10 @@
 
             <androidx.cardview.widget.CardView
                 android:id="@+id/card_payment_status"
-                style="@style/SettingsCardStyle">
+                style="@style/SettingsCardStyle"
+                app:cardBackgroundColor="#1A1A1A"
+                app:cardCornerRadius="12dp"
+                app:cardElevation="4dp">
                 <LinearLayout style="@style/SettingsCardInternalStyle">
                     <ImageView android:src="@drawable/qr_activacion" style="@style/SettingsIconStyle" android:contentDescription="Pago"/>
                     <TextView android:text="Estado de Pago" style="@style/SettingsTitleStyle"/>
@@ -50,7 +57,10 @@
 
             <androidx.cardview.widget.CardView
                 android:id="@+id/card_support"
-                style="@style/SettingsCardStyle">
+                style="@style/SettingsCardStyle"
+                app:cardBackgroundColor="#1A1A1A"
+                app:cardCornerRadius="12dp"
+                app:cardElevation="4dp">
                 <LinearLayout style="@style/SettingsCardInternalStyle">
                     <ImageView android:src="@drawable/ic_settings_logout" style="@style/SettingsIconStyle" app:tint="#25D366" android:contentDescription="Soporte"/>
                     <TextView android:text="Soporte" style="@style/SettingsTitleStyle"/>
@@ -69,7 +79,10 @@
 
             <androidx.cardview.widget.CardView
                 android:id="@+id/btnCheckUpdates"
-                style="@style/SettingsCardStyle">
+                style="@style/SettingsCardStyle"
+                app:cardBackgroundColor="#1A1A1A"
+                app:cardCornerRadius="12dp"
+                app:cardElevation="4dp">
                 <LinearLayout style="@style/SettingsCardInternalStyle">
                     <ImageView android:src="@drawable/ic_settings_sync" style="@style/SettingsIconStyle"/>
                     <TextView android:text="Sincronizar" style="@style/SettingsTitleStyle"/>
@@ -79,7 +92,10 @@
 
             <androidx.cardview.widget.CardView
                 android:id="@+id/card_player_choice"
-                style="@style/SettingsCardStyle">
+                style="@style/SettingsCardStyle"
+                app:cardBackgroundColor="#1A1A1A"
+                app:cardCornerRadius="12dp"
+                app:cardElevation="4dp">
                 <LinearLayout style="@style/SettingsCardInternalStyle">
                     <ImageView android:src="@drawable/ic_play_foreground" style="@style/SettingsIconStyle"/>
                     <TextView android:text="Reproductor" style="@style/SettingsTitleStyle"/>
@@ -89,7 +105,10 @@
 
             <androidx.cardview.widget.CardView
                 android:id="@+id/card_streaming_quality"
-                style="@style/SettingsCardStyle">
+                style="@style/SettingsCardStyle"
+                app:cardBackgroundColor="#1A1A1A"
+                app:cardCornerRadius="12dp"
+                app:cardElevation="4dp">
                 <LinearLayout style="@style/SettingsCardInternalStyle">
                     <ImageView android:src="@drawable/ic_settings_sync" style="@style/SettingsIconStyle"/>
                     <TextView android:text="Calidad" style="@style/SettingsTitleStyle"/>
@@ -107,7 +126,10 @@
 
             <androidx.cardview.widget.CardView
                 android:id="@+id/card_clean_cache"
-                style="@style/SettingsCardStyle">
+                style="@style/SettingsCardStyle"
+                app:cardBackgroundColor="#1A1A1A"
+                app:cardCornerRadius="12dp"
+                app:cardElevation="4dp">
                 <LinearLayout style="@style/SettingsCardInternalStyle">
                     <ImageView android:src="@drawable/ic_settings_logout" style="@style/SettingsIconStyle"/>
                     <TextView android:text="Limpiar Caché" style="@style/SettingsTitleStyle"/>
@@ -117,7 +139,10 @@
 
             <androidx.cardview.widget.CardView
                 android:id="@+id/card_parental_control"
-                style="@style/SettingsCardStyle">
+                style="@style/SettingsCardStyle"
+                app:cardBackgroundColor="#1A1A1A"
+                app:cardCornerRadius="12dp"
+                app:cardElevation="4dp">
                 <LinearLayout style="@style/SettingsCardInternalStyle">
                     <ImageView android:src="@drawable/ic_settings_user" style="@style/SettingsIconStyle"/>
                     <TextView android:text="Parental" style="@style/SettingsTitleStyle"/>
@@ -127,7 +152,10 @@
 
             <androidx.cardview.widget.CardView
                 android:id="@+id/card_speed_test"
-                style="@style/SettingsCardStyle">
+                style="@style/SettingsCardStyle"
+                app:cardBackgroundColor="#1A1A1A"
+                app:cardCornerRadius="12dp"
+                app:cardElevation="4dp">
                 <LinearLayout style="@style/SettingsCardInternalStyle">
                     <ImageView android:src="@drawable/ic_settings_sync" style="@style/SettingsIconStyle"/>
                     <TextView android:text="Test de Red" style="@style/SettingsTitleStyle"/>

@@ -1736,41 +1736,5 @@
       ],
       "role": "model"
     }
-  ],
-  "51045854118004": [
-    {
-      "role": "user",
-      "parts": [
-        {
-          "text": ""
-        }
-      ]
-    },
-    {
-      "parts": [
-        {
-          "text": "¡Hola! Soy tu asistente virtual de CuevanaTV, y estoy aquí para ayudarte"
-        }
-      ],
-      "role": "model"
-    }
-  ],
-  "96061255327948": [
-    {
-      "role": "user",
-      "parts": [
-        {
-          "text": ""
-        }
-      ]
-    },
-    {
-      "parts": [
-        {
-          "text": "¡Hola! Soy tu asistente virtual de **CuevanaTV** y ¡qué bueno tenerte por"
-        }
-      ],
-      "role": "model"
-    }
   ]
 }

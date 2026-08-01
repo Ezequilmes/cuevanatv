@@ -6,13 +6,15 @@ plugins {
     alias(libs.plugins.kotlinMultiplatform)
     alias(libs.plugins.androidApplication)
     alias(libs.plugins.jetbrainsCompose)
+    kotlin("plugin.serialization") version "1.9.24"
 }
 
 kotlin {
     androidTarget {
-        @Suppress("OPT_IN_USAGE")
-        compilerOptions {
-            jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+        compilations.all {
+            kotlinOptions {
+                jvmTarget = "17"
+            }
         }
     }
     
@@ -25,6 +27,7 @@ kotlin {
             implementation(libs.androidx.appcompat)
             implementation(libs.androidx.activity.compose)
             implementation(libs.kotlinx.coroutines.android)
+            implementation(libs.libvlc)
         }
         commonMain.dependencies {
             implementation(compose.runtime)
@@ -34,11 +37,24 @@ kotlin {
             implementation(compose.components.resources)
             implementation(compose.components.uiToolingPreview)
             implementation(libs.kotlinx.coroutines.core)
+            implementation(libs.okhttp)
+            implementation(libs.jsoup)
+            implementation(libs.json)
+            implementation(libs.coil.compose)
+            implementation(libs.coil.network.okhttp)
+            
+            implementation(libs.supabase.kt)
+            implementation(libs.supabase.postgrest)
+            implementation(libs.supabase.auth)
+
+            implementation(libs.webview.multiplatform)
         }
         desktopMain.dependencies {
             implementation(compose.desktop.currentOs)
             implementation(libs.kotlinx.coroutines.swing)
             implementation(libs.vlcj)
+            implementation(libs.ktor.client.cio)
+            implementation("ch.qos.logback:logback-classic:1.2.11")
         }
     }
 }
@@ -75,6 +91,9 @@ android {
     buildFeatures {
         compose = true
     }
+    composeOptions {
+        kotlinCompilerExtensionVersion = libs.versions.compose.compiler.get()
+    }
     dependencies {
         debugImplementation(compose.uiTooling)
     }
@@ -85,9 +104,12 @@ compose.desktop {
         mainClass = "app.cuevanatv.MainKt"
 
         nativeDistributions {
-            targetFormats(TargetFormat.exe)
+            targetFormats(TargetFormat.Exe)
             packageName = "CuevanaTV"
             packageVersion = "1.0.0"
+
+            // Paso 2: Incluir recursos nativos en el instalador
+            appResourcesRootDir.set(project.layout.projectDirectory.dir("vlc-resources"))
         }
     }
 }

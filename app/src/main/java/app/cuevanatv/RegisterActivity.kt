@@ -186,8 +186,7 @@ class RegisterActivity : FragmentActivity() {
                             Auth.saveToken(this@RegisterActivity, userId, e, userId)
                             val isBypass = user.optBoolean("bypass_qr", false)
                             val isActive = user.optBoolean("active", true) || isBypass // Forzamos true en registro
-                            val expiry = user.optString("fecha_vencimiento", "")
-                            Auth.saveUserStatus(this@RegisterActivity, isActive, isBypass, expiry)
+                            Auth.saveUserStatus(this@RegisterActivity, isActive, isBypass)
 
                             progress.visibility = View.GONE
                             val intent = Intent(this@RegisterActivity, MainActivity::class.java).apply {

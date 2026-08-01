@@ -37,8 +37,7 @@ class LiveGridFragment : VerticalGridSupportFragment() {
         onItemViewClickedListener = OnItemViewClickedListener { _, item, _, _ ->
             if (item is VideoItem) {
                 val intent = Intent(requireContext(), PlayerActivity::class.java).apply {
-                    putExtra("primaryUrl", item.playableUrl ?: item.streamUrl)
-                    putExtra("sourcePageUrl", item.sourcePageUrl)
+                    putExtra("primaryUrl", item.streamUrl)
                     putExtra("isLive", true)
                     putExtra("title", item.title)
                 }
@@ -49,10 +48,9 @@ class LiveGridFragment : VerticalGridSupportFragment() {
 
     private fun loadData() {
         lifecycleScope.launch {
-            val token = Auth.getToken(requireContext())
+            val token = Auth.getToken(requireContext()) ?: return@launch
             val items = ApiClient(requireContext()).getFeed(token)
-            val liveItems = items.filter { it.isLive }
-            mAdapter.addAll(0, liveItems)
+            mAdapter.addAll(0, items)
         }
     }
 }

@@ -38,7 +38,6 @@ class LiveCardPresenter : Presenter() {
             .load(video.imageUrl)
             .apply(RequestOptions().centerCrop())
             .error(Glide.with(card.context).load(avatarUrl))
-            .fallback(Glide.with(card.context).load(avatarUrl))
             .into(card.mainImageView)
     }
 

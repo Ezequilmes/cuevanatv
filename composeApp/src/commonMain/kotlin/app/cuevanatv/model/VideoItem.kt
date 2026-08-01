@@ -1,14 +1,18 @@
 package app.cuevanatv.model
 
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+
+@Serializable
 data class VideoItem(
     val id: String? = null,
     val title: String? = null,
-    val imageUrl: String? = null,
+    @SerialName("poster_url") val imageUrl: String? = null,
     val streamUrl: String? = null,
-    val playableUrl: String? = null,
-    val sourcePageUrl: String? = null,
+    @SerialName("playable_url") val playableUrl: String? = null,
+    @SerialName("source_page_url") val sourcePageUrl: String? = null,
     val category: String? = null,
-    val type: String? = null,
-    val isLive: Boolean = false,
+    val type: String? = "movie",
+    @SerialName("is_live") val isLive: Boolean = false,
     val description: String? = null
 )

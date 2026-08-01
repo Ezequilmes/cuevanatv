@@ -36,7 +36,7 @@ class MovieDetailsFragment : DetailsSupportFragment() {
         loadDetails()
         onItemViewClickedListener =
             OnItemViewClickedListener { _, item, _, _ ->
-                if (item is ServerItem) {
+                if (item is app.cuevanatv.model.ServerItem) {
                     Toast.makeText(requireContext(), "Resolviendo enlace…", Toast.LENGTH_SHORT).show()
                     val intent = Intent(activity, PlayerActivity::class.java)
                     val url = item.url ?: pageUrlArg
@@ -46,6 +46,19 @@ class MovieDetailsFragment : DetailsSupportFragment() {
                         } else {
                             intent.putExtra("pageUrl", url)
                         }
+                        
+                        // AUTO-PLAY: Pasamos la lista de episodios y el número actual
+                        if (item.episode_number != null) {
+                            intent.putExtra("episode_number", item.episode_number)
+                            val episodeList = mutableListOf<String>()
+                            for (i in 0 until serversAdapter.size()) {
+                                val s = serversAdapter.get(i) as app.cuevanatv.model.ServerItem
+                                // Guardamos un "mini-json" o formato simple: "num|url"
+                                episodeList.add("${s.episode_number}|${s.url}")
+                            }
+                            intent.putStringArrayListExtra("episode_list", ArrayList(episodeList))
+                        }
+
                         startActivity(intent)
                     }
                 }
@@ -85,7 +98,23 @@ class MovieDetailsFragment : DetailsSupportFragment() {
             descAdapter.clear()
             descAdapter.add(details.description)
             serversAdapter.clear()
-            details.servers.forEach { serversAdapter.add(it) }
+            
+            // Si hay episodios (ServerItem con episode_number), usamos EpisodeCardPresenter
+            val hasEpisodes = details.servers.any { it.episode_number != null }
+            if (hasEpisodes) {
+                val epPresenter = EpisodeCardPresenter(details.servers)
+                val epAdapter = ArrayObjectAdapter(epPresenter)
+                details.servers.forEach { epAdapter.add(it) }
+                
+                val epRow = ListRow(HeaderItem("Episodios"), epAdapter)
+                rowsAdapter.add(epRow)
+            } else {
+                // MODO PELÍCULA: Solo mostramos un botón de "Reproducir"
+                val mainServer = details.servers.firstOrNull()
+                if (mainServer != null) {
+                    serversAdapter.add(ServerItem("Reproducir", mainServer.playable_url, mainServer.id))
+                }
+            }
         }
     }
 }

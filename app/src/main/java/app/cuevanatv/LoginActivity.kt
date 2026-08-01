@@ -17,7 +17,7 @@ import kotlinx.coroutines.launch
 class LoginActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        if (!Auth.getToken(this).isNullOrEmpty()) {
+        if (Auth.getToken(this) != null) {
             startActivity(Intent(this, MainActivity::class.java))
             finish(); return
         }
@@ -65,12 +65,13 @@ class LoginActivity : FragmentActivity() {
             }
             progress.visibility = View.VISIBLE
             lifecycleScope.launch {
-                val token = ApiClient(this@LoginActivity).login(e, p)
+                val user = ApiClient(this@LoginActivity).login(e, p)
                 progress.visibility = View.GONE
-                if (token.isNullOrEmpty()) {
+                if (user == null || user.has("error_type")) {
                     info.text = "Login fallido. Verifica credenciales."
                 } else {
-                    Auth.saveSession(this@LoginActivity, token, e, true)
+                    val token = user.optString("id") // O el token real si existe
+                    Auth.saveSession(this@LoginActivity, token, e, true, user.optString("id"))
                     startActivity(Intent(this@LoginActivity, MainActivity::class.java))
                     finish()
                 }

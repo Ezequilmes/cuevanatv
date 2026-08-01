@@ -18,17 +18,9 @@ actual fun VideoPlayer(
     modifier: Modifier,
     onBack: () -> Unit
 ) {
-    Box(modifier = modifier.fillMaxSize().background(Color.Black)) {
-        VlcjPlayer(
-            url = url,
-            modifier = Modifier.fillMaxSize()
-        )
-        
-        Button(
-            onClick = onBack,
-            modifier = Modifier.align(Alignment.TopStart).padding(16.dp)
-        ) {
-            Text("Volver")
-        }
-    }
+    VlcjPlayer(
+        url = url,
+        onBack = onBack,
+        modifier = modifier.fillMaxSize()
+    )
 }

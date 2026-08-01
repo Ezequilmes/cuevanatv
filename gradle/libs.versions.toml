@@ -16,6 +16,14 @@ kotlin = "1.9.24"
 kotlinx-coroutines = "1.8.1"
 ktor = "2.3.11"
 vlcj = "4.8.2"
+coil = "3.0.0-alpha06"
+supabase = "2.5.0"
+webview-multiplatform = "1.9.0"
+okhttp = "4.12.0"
+jsoup = "1.17.2"
+libvlc = "3.6.0"
+json = "20240303"
+compose-compiler = "1.5.14"
 
 [libraries]
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
@@ -32,6 +40,17 @@ kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-c
 kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "kotlinx-coroutines" }
 kotlinx-coroutines-swing = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-swing", version.ref = "kotlinx-coroutines" }
 vlcj = { module = "uk.co.caprica:vlcj", version.ref = "vlcj" }
+libvlc = { module = "org.videolan.android:libvlc-all", version.ref = "libvlc" }
+okhttp = { module = "com.squareup.okhttp3:okhttp", version.ref = "okhttp" }
+jsoup = { module = "org.jsoup:jsoup", version.ref = "jsoup" }
+json = { module = "org.json:json", version.ref = "json" }
+coil-compose = { module = "io.coil-kt.coil3:coil-compose", version.ref = "coil" }
+coil-network-okhttp = { module = "io.coil-kt.coil3:coil-network-okhttp", version.ref = "coil" }
+supabase-kt = { module = "io.github.jan-tennert.supabase:supabase-kt", version.ref = "supabase" }
+supabase-postgrest = { module = "io.github.jan-tennert.supabase:postgrest-kt", version.ref = "supabase" }
+supabase-auth = { module = "io.github.jan-tennert.supabase:gotrue-kt", version.ref = "supabase" }
+webview-multiplatform = { module = "io.github.kevinnzou:compose-webview-multiplatform", version.ref = "webview-multiplatform" }
+ktor-client-cio = { module = "io.ktor:ktor-client-cio", version.ref = "ktor" }
 
 [plugins]
 androidApplication = { id = "com.android.application", version.ref = "agp" }
@@ -39,3 +58,4 @@ androidLibrary = { id = "com.android.library", version.ref = "agp" }
 jetbrainsCompose = { id = "org.jetbrains.compose", version.ref = "compose-multiplatform" }
 kotlinMultiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
 kotlinAndroid = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
+kotlinKapt = { id = "org.jetbrains.kotlin.kapt", version.ref = "kotlin" }

@@ -171,16 +171,16 @@ class JellyfinClient(private val context: Context) {
     private fun baseUrl(): String {
         val runtime = JellyfinPrefs.getUrl(context)
         if (runtime.isNotBlank()) return runtime
-        return BuildConfig.JELLYFIN_URL.trim()
+        return BuildConfig.JELLYFIN_URL
     }
 
     private fun apiKey(): String {
         val runtime = JellyfinPrefs.getApiKey(context)
         if (runtime.isNotBlank()) return runtime
-        return BuildConfig.JELLYFIN_API_KEY.trim()
+        return BuildConfig.JELLYFIN_API_KEY
     }
 
-    private fun configuredUserId(): String = BuildConfig.JELLYFIN_USER_ID.trim()
+    private fun configuredUserId(): String = BuildConfig.JELLYFIN_USER_ID
 
     private fun absUrl(pathOrUrl: String): String {
         val p = pathOrUrl.trim()

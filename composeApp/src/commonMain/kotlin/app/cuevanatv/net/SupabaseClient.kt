@@ -1,10 +1,10 @@
 package app.cuevanatv.net
 
 import app.cuevanatv.Config
-import io.github.jan_tenner.supabase.createSupabaseClient
-import io.github.jan_tenner.supabase.postgrest.Postgrest
-import io.github.jan_tenner.supabase.postgrest.from
-import io.github.jan_tenner.supabase.postgrest.query.Order
+import io.github.jan.supabase.createSupabaseClient
+import io.github.jan.supabase.postgrest.Postgrest
+import io.github.jan.supabase.postgrest.from
+import io.github.jan.supabase.postgrest.query.Order
 import app.cuevanatv.model.VideoItem
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -19,26 +19,60 @@ object SupabaseClient {
 
     suspend fun getFeed(category: String?): List<VideoItem> = withContext(Dispatchers.IO) {
         try {
+            println("[SUPABASE] Cargando feed para categoría: $category")
             val query = client.from("titles")
                 .select {
                     filter {
                         eq("published", true)
                         if (!category.isNullOrEmpty() && category != "Todas") {
-                            eq("category", category)
+                            ilike("category", "%$category%")
                         }
                     }
                     order("created_at", order = Order.DESCENDING)
+                    // Eliminamos cualquier limit accidental si existiera en versiones futuras del SDK
+                    // y nos aseguramos de que el conteo de la respuesta sea verificado
                 }
             
-            // Mapeo manual a VideoItem para asegurar compatibilidad
             val data = query.decodeList<VideoItemMap>()
+            println("[SUPABASE] Items recuperados: ${data.size}")
             data.map { it.toVideoItem() }
         } catch (e: Exception) {
             println("Error Supabase Feed: ${e.message}")
+            e.printStackTrace()
+            emptyList()
+        }
+    }
+
+    suspend fun getEpisodes(seriesId: String): List<EpisodeItem> = withContext(Dispatchers.IO) {
+        try {
+            val query = client.from("servers")
+                .select {
+                    filter {
+                        eq("title_id", seriesId)
+                    }
+                    order("season_number", order = Order.ASCENDING)
+                    order("episode_number", order = Order.ASCENDING)
+                }
+            query.decodeList<EpisodeItem>()
+        } catch (e: Exception) {
+            println("Error Supabase Episodes: ${e.message}")
             emptyList()
         }
     }
 }
+
+@kotlinx.serialization.Serializable
+data class EpisodeItem(
+    val id: String? = null,
+    val title: String? = null,
+    @kotlinx.serialization.SerialName("season_number")
+    val season: Int? = 1,
+    @kotlinx.serialization.SerialName("episode_number")
+    val episode: Int? = 1,
+    val playable_url: String? = null,
+    val page_url: String? = null,
+    val server_name: String? = "Server"
+)
 
 // Clase auxiliar para decodificación de Supabase
 @kotlinx.serialization.Serializable

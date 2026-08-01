@@ -22,6 +22,6 @@ class MyGlideModule : AppGlideModule() {
     override fun registerComponents(context: Context, glide: Glide, registry: Registry) {
         // Usar el cliente global de ApiClient para mantener coherencia en timeouts y bypass SSL
         val okHttpClient = ApiClient.getUnsafeClient()
-        registry.replace(GlideUrl::class.java, InputStream::class.java, OkHttpUrlLoader.Factory(okHttpClient))
+        registry.replace(GlideUrl::class.java, InputStream::class.java, com.bumptech.glide.integration.okhttp3.OkHttpUrlLoader.Factory(okHttpClient))
     }
 }

@@ -18,6 +18,13 @@ class InvisibleWebScraper(private val context: Context) {
 
     @SuppressLint("SetJavaScriptEnabled")
     fun fetchLiveStream(pageUrl: String, onLinkFound: (String) -> Unit) {
+        // OPTIMIZACIÓN SENIOR: Si ya es un stream directo, no perdamos tiempo con WebView
+        if (pageUrl.endsWith(".m3u8", ignoreCase = true) || pageUrl.endsWith(".m3u", ignoreCase = true)) {
+            Log.d(TAG, "⚡ Bypass: Enlace directo detectado (.m3u8/.m3u). Saltando WebView.")
+            onLinkFound(pageUrl)
+            return
+        }
+
         Handler(Looper.getMainLooper()).post {
             isFound = false
             webView = WebView(context)
@@ -72,7 +79,7 @@ class InvisibleWebScraper(private val context: Context) {
         Handler(Looper.getMainLooper()).post {
             webView?.apply {
                 stopLoading()
-                webViewClient = null
+                webViewClient = object : WebViewClient() {}
                 destroy()
             }
             webView = null

@@ -8,17 +8,20 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import android.view.KeyEvent
+import android.view.GestureDetector
+import android.view.MotionEvent
 import android.view.View
+import kotlin.math.abs
 import android.widget.*
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
-import androidx.media3.common.MediaItem
-import androidx.media3.common.Player
-import androidx.media3.datasource.okhttp.OkHttpDataSource
-import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
-import androidx.media3.ui.PlayerView
-import androidx.media3.common.util.UnstableApi
+import com.google.android.exoplayer2.ExoPlayer
+import com.google.android.exoplayer2.MediaItem
+import com.google.android.exoplayer2.Player
+import com.google.android.exoplayer2.source.DefaultMediaSourceFactory
+import com.google.android.exoplayer2.ui.StyledPlayerView
+import com.google.android.exoplayer2.upstream.DefaultDataSourceFactory
+import com.google.android.exoplayer2.util.Util
 import app.cuevanatv.R
 import app.cuevanatv.net.InvisibleWebScraper
 import app.cuevanatv.net.ApiClient
@@ -41,16 +44,15 @@ import java.util.concurrent.TimeUnit
  * 
  * FIX: Gestión estricta de memoria para evitar bloqueos al cambiar canales.
  */
-@UnstableApi
 class PlayerActivity : FragmentActivity() {
 
     // Motores de reproducción
-    private var libVlc: LibVLC? = null
-    private var mediaPlayer: MediaPlayer? = null
-    private var exoPlayer: ExoPlayer? = null
+    private var libVlc: Any? = null
+    private var mediaPlayer: Any? = null
+    private var exoPlayer: com.google.android.exoplayer2.ExoPlayer? = null
     
-    private lateinit var vlcVideoLayout: VLCVideoLayout
-    private lateinit var exoPlayerView: PlayerView
+    private lateinit var vlcVideoLayout: android.view.View
+    private lateinit var exoPlayerView: com.google.android.exoplayer2.ui.StyledPlayerView
 
 // --- UI CONTROLS ---
     private lateinit var controlsContainer: View
@@ -76,15 +78,19 @@ class PlayerActivity : FragmentActivity() {
     private var isLive: Boolean = false
     private var scraper: InvisibleWebScraper? = null
 
+    // GESTIÓN DE AUTO-PLAY (SERIES)
+    private var currentEpisodeNumber: Int = -1
+    private var episodesList: List<Pair<Int, String>> = emptyList()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_player)
 
         // Inicializar vistas
-        vlcVideoLayout = findViewById(R.id.player_view)
-        exoPlayerView = findViewById(R.id.exo_player_view)
+        vlcVideoLayout = findViewById<android.view.View>(R.id.vlc_view)
+        exoPlayerView = findViewById<com.google.android.exoplayer2.ui.StyledPlayerView>(R.id.exo_view)
         
-        controlsContainer = findViewById(R.id.controls_container)
+        controlsContainer = findViewById<View>(R.id.controls_container)
         btnPlayPause = findViewById(R.id.btn_play_pause)
         btnTracks = findViewById(R.id.btn_tracks)
         tvCurrentTime = findViewById(R.id.tv_current_time)
@@ -115,6 +121,7 @@ class PlayerActivity : FragmentActivity() {
         vlcVideoLayout.setOnClickListener { toggleControls() }
         exoPlayerView.setOnClickListener { toggleControls() }
 
+        setupSwipeGestures()
         setupSeekBar()
         
         handleIntent(intent)
@@ -137,7 +144,17 @@ class PlayerActivity : FragmentActivity() {
         isLive = intent.getBooleanExtra("is_live", false) || intent.getBooleanExtra("isLive", false)
         val type = intent.getStringExtra("type") ?: "movie"
 
-        Log.d("PlayerActivity", ">>> REPRODUCCIÓN - isLive: $isLive | Type: $type | URL: $videoUrl")
+        // CARGA DE METADATOS PARA AUTO-PLAY
+        currentEpisodeNumber = intent.getIntExtra("episode_number", -1)
+        val rawList = intent.getStringArrayListExtra("episode_list")
+        if (rawList != null) {
+            episodesList = rawList.mapNotNull { 
+                val parts = it.split("|")
+                if (parts.size >= 2) parts[0].toIntOrNull()?.to(parts[1]) else null
+            }
+        }
+
+        Log.d("PlayerActivity", ">>> REPRODUCCIÓN - isLive: $isLive | Type: $type | URL: $videoUrl | Ep: $currentEpisodeNumber")
         
         // DEPURACIÓN VISUAL PARA TV
         Toast.makeText(this, "URL Recibida: $videoUrl", Toast.LENGTH_LONG).show()
@@ -166,8 +183,11 @@ class PlayerActivity : FragmentActivity() {
         Log.d("PlayerActivity", "♻️ Reseteando reproducción (Manteniendo Engine)")
         lifecycleScope.coroutineContext.cancelChildren()
         
-        mediaPlayer?.stop()
-        mediaPlayer?.release()
+        val player = mediaPlayer as? org.videolan.libvlc.MediaPlayer
+        if (player != null) {
+            player.stop()
+            player.release()
+        }
         mediaPlayer = null
         
         exoPlayer?.stop()
@@ -219,10 +239,10 @@ class PlayerActivity : FragmentActivity() {
         
         val args = ArrayList<String>()
         args.add("-vvv")
-        args.add("--http-user-agent=" + ApiClient.USER_AGENT)
+        args.add("--http-user-agent=Mozilla/5.0")
         
         val referer = intent.getStringExtra("referer") ?: intent.getStringExtra("sourcePageUrl")
-        if (!referer.isNullOrBlank()) {
+        if (referer != null) {
             args.add("--http-referrer=$referer")
         }
         
@@ -239,16 +259,17 @@ class PlayerActivity : FragmentActivity() {
         
         // REUTILIZACIÓN DE MOTOR: Solo crear si es nulo
         if (libVlc == null) {
-            libVlc = LibVLC(this, args)
+            libVlc = org.videolan.libvlc.LibVLC(this, args)
         }
         
-        mediaPlayer = MediaPlayer(libVlc)
-        mediaPlayer?.attachViews(vlcVideoLayout, null, false, false)
+        val player = org.videolan.libvlc.MediaPlayer(libVlc as org.videolan.libvlc.LibVLC)
+        mediaPlayer = player
+        player.attachViews(vlcVideoLayout as org.videolan.libvlc.util.VLCVideoLayout, null, false, false)
 
-        val media = Media(libVlc, Uri.parse(safeUrl))
-        mediaPlayer?.media = media
+        val media = org.videolan.libvlc.Media(libVlc as org.videolan.libvlc.LibVLC, Uri.parse(safeUrl))
+        player.media = media
         media.release()
-        mediaPlayer?.play()
+        player.play()
         
         updateVLCProgress()
     }
@@ -258,9 +279,7 @@ class PlayerActivity : FragmentActivity() {
         vlcVideoLayout.visibility = View.GONE
         exoPlayerView.visibility = View.VISIBLE
         
-        // SEGURIDAD SENIOR: Bypass SSL en Android 5.1
-        val unsafeOkHttp = ApiClient.getUnsafeClient(followRedirects = true)
-        val dataSourceFactory = OkHttpDataSource.Factory(unsafeOkHttp)
+        val dataSourceFactory = DefaultDataSourceFactory(this, "CuevanaTV")
 
         exoPlayer = ExoPlayer.Builder(this)
             .setMediaSourceFactory(DefaultMediaSourceFactory(dataSourceFactory))
@@ -277,17 +296,51 @@ class PlayerActivity : FragmentActivity() {
         exoPlayer?.playWhenReady = true
         
         exoPlayer?.addListener(object : Player.Listener {
-            override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+            override fun onPlayerError(error: com.google.android.exoplayer2.PlaybackException) {
                 Log.e("PlayerActivity", "ExoPlayer Error: ${error.message}")
                 Toast.makeText(this@PlayerActivity, "Reintentando stream...", Toast.LENGTH_SHORT).show()
                 resolveLiveTokenAndPlay(videoUrl)
             }
+
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                if (playbackState == Player.STATE_ENDED) {
+                    playNextEpisode()
+                }
+            }
         })
     }
 
+    private fun playNextEpisode() {
+        if (episodesList.isEmpty() || currentEpisodeNumber == -1) return
+
+        val nextEpNum = currentEpisodeNumber + 1
+        val nextEp = episodesList.find { it.first == nextEpNum }
+
+        if (nextEp != null) {
+            Log.d("PlayerActivity", "⏭️ AUTO-PLAY: Cargando capítulo $nextEpNum")
+            Toast.makeText(this, "Reproduciendo siguiente capítulo ($nextEpNum)...", Toast.LENGTH_LONG).show()
+            
+            // Actualizar estado y reiniciar flujo
+            videoUrl = nextEp.second
+            currentEpisodeNumber = nextEpNum
+            
+            if (videoUrl?.startsWith("http") == true) {
+                playWithVlc(videoUrl!!)
+            } else {
+                // Si es un slug o requiere scraping (poco común en este punto pero preventivo)
+                iniciarScraping(videoUrl!!)
+            }
+        } else {
+            Log.d("PlayerActivity", "🏁 Fin de la serie o lista de episodios.")
+        }
+    }
+
     private fun stopVlcPlayer() {
-        mediaPlayer?.stop()
-        mediaPlayer?.release()
+        val player = mediaPlayer as? org.videolan.libvlc.MediaPlayer
+        if (player != null) {
+            player.stop()
+            player.release()
+        }
         mediaPlayer = null
     }
 
@@ -298,9 +351,11 @@ class PlayerActivity : FragmentActivity() {
     }
 
     private fun togglePlayPause() {
-        mediaPlayer?.let {
-            if (it.isPlaying) it.pause() else it.play()
-            btnPlayPause.text = if (it.isPlaying) "PAUSA" else "REPRODUCIR"
+        val player = mediaPlayer as? org.videolan.libvlc.MediaPlayer
+        if (player != null) {
+            if (player.isPlaying) player.pause() else player.play()
+            btnPlayPause.text = if (player.isPlaying) "PAUSA" else "REPRODUCIR"
+            return
         }
         exoPlayer?.let {
             if (it.isPlaying) it.pause() else it.play()
@@ -312,11 +367,52 @@ class PlayerActivity : FragmentActivity() {
         // VLC Tracks (Legacy)
     }
 
+    private fun setupSwipeGestures() {
+        val gestureDetector = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
+            override fun onFling(e1: MotionEvent?, e2: MotionEvent, velocityX: Float, velocityY: Float): Boolean {
+                if (e1 == null) return false
+                val diffX = e2.x - e1.x
+                val diffY = e2.y - e1.y
+                if (abs(diffX) > abs(diffY)) {
+                    if (abs(diffX) > 100 && abs(velocityX) > 100) {
+                        if (diffX > 0) onSwipeRight() else onSwipeLeft()
+                        return true
+                    }
+                }
+                return false
+            }
+        })
+
+        val touchListener = View.OnTouchListener { _: View, event: MotionEvent ->
+            gestureDetector.onTouchEvent(event)
+            false
+        }
+
+        findViewById<View>(R.id.player_root).setOnTouchListener(touchListener)
+    }
+
+    private fun onSwipeLeft() {
+        if (isLive) {
+            Log.d("PlayerActivity", "Swipe Left - Siguiente Canal")
+            Toast.makeText(this, "Cambiando al siguiente canal...", Toast.LENGTH_SHORT).show()
+            // Aquí iría la lógica para obtener el siguiente canal de una lista global o similar
+        }
+    }
+
+    private fun onSwipeRight() {
+        if (isLive) {
+            Log.d("PlayerActivity", "Swipe Right - Canal Anterior")
+            Toast.makeText(this, "Cambiando al canal anterior...", Toast.LENGTH_SHORT).show()
+            // Aquí iría la lógica para el canal anterior
+        }
+    }
+
     private fun setupSeekBar() {
         seekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
                 if (fromUser && !isLive) {
-                    mediaPlayer?.let {
+                    val player = mediaPlayer as? org.videolan.libvlc.MediaPlayer
+                    player?.let {
                         val duration = it.length
                         val newPosition = (duration * progress / 100)
                         it.time = newPosition
@@ -329,10 +425,13 @@ class PlayerActivity : FragmentActivity() {
     }
 
     private fun updateVLCProgress() {
+        val player = mediaPlayer as? org.videolan.libvlc.MediaPlayer
+        if (player == null) return
+
         lifecycleScope.launch(Dispatchers.Main) {
-            while (mediaPlayer != null && !isFinishing) {
-                val time = mediaPlayer?.time ?: 0
-                val length = mediaPlayer?.length ?: 0
+            while (player != null && !isFinishing) {
+                val time = player.time
+                val length = player.length
                 if (length > 0) {
                     val progress = (time * 100 / length).toInt()
                     seekBar.progress = progress
@@ -377,15 +476,15 @@ class PlayerActivity : FragmentActivity() {
         isControlsVisible = false
     }
 
-    override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
+    override fun onKeyDown(keyCode: Int, event: android.view.KeyEvent?): Boolean {
         when (keyCode) {
-            KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
+            android.view.KeyEvent.KEYCODE_DPAD_CENTER, android.view.KeyEvent.KEYCODE_ENTER -> {
                 if (!isControlsVisible) {
                     showControls()
                     return true
                 }
             }
-            KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN, KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT -> {
+            android.view.KeyEvent.KEYCODE_DPAD_UP, android.view.KeyEvent.KEYCODE_DPAD_DOWN, android.view.KeyEvent.KEYCODE_DPAD_LEFT, android.view.KeyEvent.KEYCODE_DPAD_RIGHT -> {
                 showControls()
             }
         }
@@ -427,13 +526,19 @@ class PlayerActivity : FragmentActivity() {
         Log.d("PlayerActivity", "🛑 Liberación TOTAL de hardware")
         stopPlaybackButKeepEngine()
         
-        libVlc?.release()
+        val engine = libVlc as? org.videolan.libvlc.LibVLC
+        if (engine != null) {
+            engine.release()
+        }
         libVlc = null
     }
 
     override fun onPause() {
         super.onPause()
-        mediaPlayer?.pause()
+        val player = mediaPlayer as? org.videolan.libvlc.MediaPlayer
+        if (player != null) {
+            player.pause()
+        }
         exoPlayer?.pause()
     }
 

@@ -1,28 +1,148 @@
+<?xml version="1.0" encoding="utf-8"?>
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/player_root"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
+    android:layout_height="match_parent"
+    android:background="#000000">
 
-    <com.google.android.exoplayer2.ui.StyledPlayerView
-        android:id="@+id/player_view"
+    <!-- MOTOR 1: VLC -->
+    <org.videolan.libvlc.util.VLCVideoLayout
+        android:id="@+id/vlc_view"
         android:layout_width="match_parent"
-        android:layout_height="match_parent" />
+        android:layout_height="match_parent"
+        android:focusable="true"
+        android:keepScreenOn="true" />
+
+    <!-- MOTOR 2: EXO (LIVE) -->
+    <com.google.android.exoplayer2.ui.StyledPlayerView
+        android:id="@+id/exo_view"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:visibility="gone" />
+
+    <!-- Barra de Controles Personalizada -->
+    <LinearLayout
+        android:id="@+id/controls_container"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:background="#99000000"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:padding="16dp"
+        android:visibility="gone">
+
+        <Button
+            android:id="@+id/btn_play_pause"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:backgroundTint="#000000"
+            android:focusable="true"
+            android:focusableInTouchMode="true"
+            android:text="Pause"
+            android:textColor="#FFFFFF" />
+
+        <Button
+            android:id="@+id/btn_tracks"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:backgroundTint="#333333"
+            android:focusable="true"
+            android:focusableInTouchMode="true"
+            android:text="Tracks"
+            android:textColor="#FFFFFF" />
+
+        <TextView
+            android:id="@+id/tv_current_time"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="16dp"
+            android:text="00:00"
+            android:textColor="#FFFFFF" />
+
+        <SeekBar
+            android:id="@+id/seek_bar"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:focusable="true"
+            android:focusableInTouchMode="true"
+            android:max="100" />
+
+        <TextView
+            android:id="@+id/tv_total_time"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="8dp"
+            android:text="00:00"
+            android:textColor="#FFFFFF" />
+
+        <Button
+            android:id="@+id/btn_back"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Volver"
+            android:focusable="true"
+            android:visibility="visible" />
+
+    </LinearLayout>
+
+    <!-- Paywall / QR -->
+    <RelativeLayout
+        android:id="@+id/paywall_container"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#E6000000"
+        android:visibility="gone"
+        android:gravity="center">
+
+        <ImageView
+            android:id="@+id/iv_paywall_qr"
+            android:layout_width="250dp"
+            android:layout_height="250dp"
+            android:layout_centerHorizontal="true"
+            android:background="#FFFFFF"
+            android:padding="10dp" />
+
+        <Button
+            android:id="@+id/btn_mercadopago"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_below="@id/iv_paywall_qr"
+            android:layout_centerHorizontal="true"
+            android:layout_marginTop="20dp"
+            android:text="Pagar con MercadoPago" />
+
+        <Button
+            android:id="@+id/btn_paywall_close"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_below="@id/btn_mercadopago"
+            android:layout_centerHorizontal="true"
+            android:layout_marginTop="10dp"
+            android:text="Cerrar" />
+    </RelativeLayout>
 
     <LinearLayout
         android:id="@+id/loading_overlay"
         android:orientation="vertical"
         android:gravity="center"
-        android:background="#80000000"
+        android:background="#CC000000"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:visibility="gone">
 
         <ProgressBar
             android:layout_width="wrap_content"
-            android:layout_height="wrap_content" />
+            android:layout_height="wrap_content"
+            android:indeterminateTint="#E50914" />
 
         <TextView
+            android:id="@+id/loading_text"
             android:layout_marginTop="16dp"
-            android:text="Resolviendo enlace…"
+            android:text="Cargando..."
             android:textColor="#FFFFFF"
             android:textSize="18sp"
             android:layout_width="wrap_content"

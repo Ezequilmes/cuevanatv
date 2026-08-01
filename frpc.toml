@@ -1,9 +1,10 @@
-server_addr = "IP_PUBLICA_DE_TU_VPS"
-server_port = 7000
+serverAddr = "192.168.0.176"
+serverPort = 7000
+auth.token = "cuevana_token_2026"
 
 [[proxies]]
-name = "cuevana-tv-local"
+name = "cuevana-app"
 type = "http"
-local_ip = "127.0.0.1"
-local_port = 8787
-custom_domains = ["cuevana-tv-arg.duckdns.org"]
+localIP = "127.0.0.1"
+localPort = 8787
+customDomains = ["cuevana-tv-arg.duckdns.org"]

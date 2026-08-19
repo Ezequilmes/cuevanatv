@@ -22,7 +22,6 @@ class NewsCardPresenter : Presenter() {
         val card = viewHolder.view as ImageCardView
         
         card.titleText = news.title
-        card.contentLines = 1 // Evitar que el texto sea muy largo en la tarjeta
         
         Glide.with(card.context)
             .load(news.image_url)

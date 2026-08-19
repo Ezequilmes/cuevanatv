@@ -1,6 +1,7 @@
 plugins {
     alias(libs.plugins.androidApplication)
     alias(libs.plugins.kotlinAndroid)
+    alias(libs.plugins.kotlinKapt)
 }
 
 android {
@@ -20,11 +21,11 @@ android {
         applicationId = "app.cuevanatv"
         minSdk = 21
         targetSdk = 34
-        versionCode = 100
-        versionName = "26.10.1 (GOLD)"
+        versionCode = 101
+        versionName = "26.10.2 (GOLD)"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        val supabaseUrl = project.findProperty("supabase_url") ?: System.getenv("SUPABASE_URL") ?: ""
-        val supabaseAnonKey = project.findProperty("supabase_anon_key") ?: System.getenv("SUPABASE_ANON_KEY") ?: ""
+        val supabaseUrl = project.findProperty("SUPABASE_URL") ?: System.getenv("SUPABASE_URL") ?: ""
+        val supabaseAnonKey = project.findProperty("SUPABASE_ANON_KEY") ?: System.getenv("SUPABASE_ANON_KEY") ?: ""
         buildConfigField("String", "SUPABASE_URL", "\"$supabaseUrl\"")
         buildConfigField("String", "SUPABASE_ANON_KEY", "\"$supabaseAnonKey\"")
 
@@ -83,7 +84,10 @@ dependencies {
     implementation("com.google.android.exoplayer:exoplayer:2.19.1")
     implementation("com.github.bumptech.glide:glide:4.16.0")
     implementation("com.github.bumptech.glide:okhttp3-integration:4.16.0")
+    kapt("com.github.bumptech.glide:compiler:4.16.0")
+    implementation("jp.wasabeef:glide-transformations:4.3.0")
     implementation("com.google.zxing:core:3.5.3")
+    implementation("com.journeyapps:zxing-android-embedded:4.3.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("org.jsoup:jsoup:1.17.2")
     implementation(libs.kotlinx.coroutines.android)

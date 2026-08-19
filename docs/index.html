@@ -395,12 +395,48 @@
             }
         }
 
-        // --- AUTENTICACIÓN OPTIMIZADA ---
+        // --- AUTENTICACIÓN HÍBRIDA CON AUTO-MIGRACIÓN (SENIOR) ---
         window.login = async function(email, password) {
-            const { data, error } = await window.supabaseClient.auth.signInWithPassword({
+            // 1. Intentar login oficial en Supabase Auth
+            let { data, error } = await window.supabaseClient.auth.signInWithPassword({
                 email: email,
                 password: password
             });
+
+            // 2. Si falla, verificar si es un usuario antiguo de la APK (Migración Crítica)
+            if (error && (error.message.includes('Invalid login credentials') || error.status === 400)) {
+                console.log("Detectado posible usuario antiguo. Iniciando auto-migración...");
+
+                // Consultamos la tabla pública donde la APK guarda los datos
+                const { data: legacyUser, error: legacyError } = await window.supabaseClient
+                    .from('app_users')
+                    .select('*')
+                    .eq('email', email)
+                    .eq('password', password) // Buscamos coincidencia exacta de contraseña legacy
+                    .maybeSingle();
+
+                if (legacyUser) {
+                    console.log("Usuario verificado en tabla legacy. Creando cuenta oficial...");
+
+                    // Creamos la cuenta en Auth usando los mismos datos
+                    const { data: signUpData, error: signUpError } = await window.supabaseClient.auth.signUp({
+                        email: email,
+                        password: password
+                    });
+
+                    if (signUpError) throw signUpError;
+
+                    // Re-intentamos el login inmediatamente
+                    const retry = await window.supabaseClient.auth.signInWithPassword({
+                        email: email,
+                        password: password
+                    });
+
+                    if (retry.error) throw retry.error;
+                    return retry.data.user;
+                }
+            }
+
             if (error) throw error;
             return data.user;
         }

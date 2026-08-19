@@ -1,4 +1,3 @@
-# Workflow para desplegar contenido estático a GitHub Pages
 name: Deploy static content to Pages
 
 on:
@@ -13,24 +12,22 @@ permissions:
 
 concurrency:
   group: "pages"
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Setup Pages
-        uses: actions/configure-pages@v4
+        with:
+          submodules: false
+      
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          # Desplegamos la carpeta /docs
-          path: './docs'
+          path: 'docs'
+          
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4

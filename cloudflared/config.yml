@@ -1,0 +1,17 @@
+tunnel: 3804be31-def1-4aa7-8f8d-5604f76c5a49
+ingress:
+  # Optimización para Streaming de Video
+  - hostname: video.cuevanatv.store
+    service: http://localhost:80
+    originRequest:
+      connectTimeout: 30s
+      keepAliveTimeout: 120s
+      tcpKeepAlive: 30s
+      noChunkedEncoding: false
+  
+  # API y Panel de Administración
+  - hostname: panel.cuevanatv.store
+    service: http://localhost:8787
+
+  # Fallback (404 para cualquier otro subdominio no mapeado)
+  - service: http_status:404

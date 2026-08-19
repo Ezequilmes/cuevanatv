@@ -7,6 +7,8 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://sdk.mercadopago.com/js/v2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;700;900&display=swap" rel="stylesheet">
     <script>
@@ -349,20 +351,47 @@
         });
 
         window.syncUserData = async function(authUser) {
-            const { data: userData, error } = await window.supabaseClient
-                .from('app_users')
-                .select('*')
-                .eq('id', authUser.id)
-                .single();
+            // Loading state inicial
+            const badge = document.getElementById('dash-status-badge');
+            if(badge) badge.innerText = "Sincronizando...";
 
-            if (error) {
-                console.error("Error al sincronizar datos:", error.message);
-                window.updateUI({ email: authUser.email, active: false, days_remaining: 0 });
-                return;
-            }
+            try {
+                const { data: userData, error } = await window.supabaseClient
+                    .from('app_users')
+                    .select('*')
+                    .eq('id', authUser.id)
+                    .single();
 
-            if (userData) {
-                window.updateUI(userData);
+                if (error || !userData) {
+                    // Si el usuario existe en Auth pero no en app_users (sucede en registros nuevos o migraciones)
+                    console.log("Creando registro de usuario en app_users...");
+                    const trialDate = new Date();
+                    trialDate.setDate(trialDate.getDate() + 3);
+
+                    const { data: newUser, error: insError } = await window.supabaseClient.from('app_users').insert([{
+                        id: authUser.id,
+                        email: authUser.email,
+                        active: true,
+                        days_remaining: 3,
+                        fecha_vencimiento: trialDate.toISOString(),
+                        bot_step: 'nuevo'
+                    }]).select().single();
+
+                    if (insError) throw insError;
+                    window.updateUI(newUser);
+                } else {
+                    window.updateUI(userData);
+                }
+            } catch (err) {
+                console.error("Error crítico de sincronización:", err.message);
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Error de Sincronización',
+                    text: 'No pudimos obtener tus datos. Intenta recargar la página.',
+                    background: '#0f0f0f',
+                    color: '#fff',
+                    confirmButtonColor: '#E50914'
+                });
             }
         }
 
@@ -387,15 +416,16 @@
 
         // --- INTEGRACIÓN MERCADOPAGO V2 ---
         window.initMercadoPago = async function() {
-            if (!window.currentUser) return alert("Debes iniciar sesión para pagar.");
+            if (!window.currentUser) return Swal.fire('Error', 'Debes iniciar sesión para pagar.', 'error');
 
             const btn = document.getElementById('checkout-btn');
             const originalContent = btn.innerHTML;
 
             btn.disabled = true;
-            btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Generando orden...';
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Procesando...';
 
             try {
+                // Llamada a la Edge Function de Supabase
                 const response = await fetch(`${SUPABASE_URL}/functions/v1/create-preference`, {
                     method: 'POST',
                     headers: {
@@ -404,79 +434,114 @@
                     },
                     body: JSON.stringify({
                         email: window.currentUser.email,
-                        title: "Abono Mensual CuevanaTV",
+                        title: "Suscripción Premium CuevanaTV",
                         price: 3000
                     })
                 });
 
-                const { preferenceId, error } = await response.json();
-                if (error || !preferenceId) throw new Error("No se pudo obtener el ID de pago.");
+                const data = await response.json();
+                if (data.error || !data.preferenceId) throw new Error(data.error || "No se pudo generar el pago.");
 
+                // Abrir checkout de MercadoPago
                 window.mp.checkout({
-                    preference: { id: preferenceId },
+                    preference: { id: data.preferenceId },
                     autoOpen: true
+                });
+
+                Swal.fire({
+                    title: '¡Casi listo!',
+                    text: 'Completa el pago en la ventana que se abrió. Tus días se activarán automáticamente al finalizar.',
+                    icon: 'info',
+                    background: '#0f0f0f', color: '#fff', confirmButtonColor: '#009EE3'
                 });
 
             } catch (err) {
                 console.error("Error MP:", err);
-                alert("Fallo al conectar con MercadoPago. Intenta nuevamente.");
+                Swal.fire('Error', 'Fallo al conectar con MercadoPago: ' + err.message, 'error');
             } finally {
                 btn.disabled = false;
                 btn.innerHTML = originalContent;
             }
         }
 
-        // --- PANEL DE ADMINISTRACIÓN ---
+        // --- PANEL DE ADMINISTRACIÓN ROBUSTO ---
         window.openAdminPanel = async function() {
-            if (!window.currentUser || window.currentUser.email !== 'mazzera@hot.com') return;
+            const adminEmail = 'mazzera@hot.com'; // O el email que definas como admin
+            if (!window.currentUser || window.currentUser.email !== adminEmail) return;
             
             const tbody = document.getElementById('admin-user-list');
-            tbody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-gray-400">Cargando usuarios...</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="4" class="text-center py-8"><i class="fas fa-spinner fa-spin fa-2x text-amber-500"></i></td></tr>';
             
             document.getElementById('admin-modal').classList.replace('hidden', 'flex');
 
             const { data: users, error } = await window.supabaseClient
                 .from('app_users')
-                .select('*');
+                .select('*')
+                .order('created_at', { ascending: false });
 
             if (error) {
-                tbody.innerHTML = `<tr><td colspan="4" class="text-center py-4 text-netflix">Error al cargar usuarios: ${error.message}</td></tr>`;
-                return;
-            }
-
-            if (!users || users.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-gray-400">No hay usuarios registrados.</td></tr>';
+                tbody.innerHTML = `<tr><td colspan="4" class="text-center py-4 text-netflix">Error: ${error.message}</td></tr>`;
                 return;
             }
 
             tbody.innerHTML = users.map(u => `
-                <tr class="border-b border-white/5 hover:bg-white/5">
-                    <td class="py-4 px-4 font-bold text-white">${u.email || u.id}</td>
-                    <td class="py-4 px-4 text-gray-400">${u.days_remaining || 0} días</td>
+                <tr class="border-b border-white/5 hover:bg-white/5 transition-colors">
                     <td class="py-4 px-4">
-                        <span class="px-2 py-1 rounded text-xs font-bold ${u.active ? 'bg-green-500/20 text-green-400' : 'bg-netflix/20 text-netflix'}">
-                            ${u.active ? 'Activo' : 'Vencido'}
+                        <div class="font-bold text-white">${u.email}</div>
+                        <div class="text-[10px] text-gray-500 font-mono">${u.id.substring(0,8)}...</div>
+                    </td>
+                    <td class="py-4 px-4">
+                        <div class="text-white font-black">${u.days_remaining || 0} DÍAS</div>
+                        <div class="text-[10px] text-gray-500">${u.active ? 'ACTIVO' : 'VENCIDO'}</div>
+                    </td>
+                    <td class="py-4 px-4">
+                        <span class="px-2 py-1 rounded-full text-[10px] font-black uppercase ${u.active ? 'bg-green-500/20 text-green-400' : 'bg-netflix/20 text-netflix'}">
+                            ${u.active ? 'Premium' : 'Inactivo'}
                         </span>
                     </td>
-                    <td class="py-4 px-4 text-right">
-                        <button onclick="window.toggleUserStatus('${u.id}', ${!u.active})" class="bg-white/10 hover:bg-white/20 text-white px-3 py-1 rounded text-xs font-bold transition-all">
-                            ${u.active ? 'Desactivar' : 'Activar'}
-                        </button>
+                    <td class="py-4 px-4 text-right space-x-2">
+                        <button onclick="window.quickAddDays('${u.id}', 30)" class="bg-green-600 hover:bg-green-700 text-white px-2 py-1 rounded text-[10px] font-bold" title="+30 Días">+30d</button>
+                        <button onclick="window.quickBlockUser('${u.id}')" class="bg-netflix hover:bg-red-800 text-white px-2 py-1 rounded text-[10px] font-bold" title="Bloquear"><i class="fas fa-ban"></i></button>
                     </td>
                 </tr>
             `).join('');
         }
 
-        window.toggleUserStatus = async function(userId, newActiveStatus) {
+        window.quickAddDays = async function(userId, days) {
+            const { data: user } = await window.supabaseClient.from('app_users').select('days_remaining').eq('id', userId).single();
+            const newTotal = (user?.days_remaining || 0) + days;
+
             const { error } = await window.supabaseClient
                 .from('app_users')
-                .update({ active: newActiveStatus, days_remaining: newActiveStatus ? 30 : 0 })
+                .update({ days_remaining: newTotal, active: true, updated_at: new Date().toISOString() })
                 .eq('id', userId);
 
             if (error) {
-                alert("Error al actualizar usuario: " + error.message);
+                Swal.fire('Error', error.message, 'error');
             } else {
+                Swal.fire('¡Éxito!', `Se añadieron ${days} días.`, 'success');
                 window.openAdminPanel();
+            }
+        }
+
+        window.quickBlockUser = async function(userId) {
+            const confirm = await Swal.fire({
+                title: '¿Bloquear usuario?',
+                text: "Se le quitarán todos los días y el acceso premium.",
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#E50914',
+                confirmButtonText: 'Sí, bloquear',
+                background: '#0f0f0f', color: '#fff'
+            });
+
+            if (confirm.isConfirmed) {
+                const { error } = await window.supabaseClient
+                    .from('app_users')
+                    .update({ active: false, days_remaining: 0, updated_at: new Date().toISOString() })
+                    .eq('id', userId);
+
+                if (!error) window.openAdminPanel();
             }
         }
 
@@ -522,10 +587,20 @@
                         }
                         window.closeModal('auth-modal');
                         if (window.currentMode === 'signup') {
-                            alert("¡Cuenta creada! Revisa tu email para confirmar tu suscripción.");
+                            Swal.fire({
+                                icon: 'success',
+                                title: '¡Bienvenido!',
+                                text: 'Cuenta creada con éxito. Ya tienes tus 3 días de prueba gratis.',
+                                background: '#0f0f0f', color: '#fff', confirmButtonColor: '#E50914'
+                            });
                         }
                     } catch (error) {
-                        alert("Error: " + error.message);
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Error',
+                            text: error.message,
+                            background: '#0f0f0f', color: '#fff', confirmButtonColor: '#E50914'
+                        });
                     } finally {
                         btn.disabled = false;
                         btn.innerText = originalText;

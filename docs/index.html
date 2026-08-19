@@ -351,20 +351,52 @@
         });
 
         window.syncUserData = async function(authUser) {
-            // Loading state inicial
             const badge = document.getElementById('dash-status-badge');
             if(badge) badge.innerText = "Sincronizando...";
 
             try {
-                const { data: userData, error } = await window.supabaseClient
+                // 1. Primero intentamos buscar por ID (Vínculo oficial)
+                let { data: userData, error } = await window.supabaseClient
                     .from('app_users')
                     .select('*')
                     .eq('id', authUser.id)
-                    .single();
+                    .maybeSingle();
 
-                if (error || !userData) {
-                    // Si el usuario existe en Auth pero no en app_users (sucede en registros nuevos o migraciones)
-                    console.log("Creando registro de usuario en app_users...");
+                // 2. Si no existe por ID, lo buscamos por EMAIL (Migración de APK antigua)
+                if (!userData) {
+                    console.log("Usuario no encontrado por ID, buscando por Email...");
+                    const { data: legacyByEmail } = await window.supabaseClient
+                        .from('app_users')
+                        .select('*')
+                        .eq('email', authUser.id.includes('@') ? authUser.id : authUser.email) // Fallback seguro
+                        .maybeSingle();
+
+                    const targetEmail = authUser.email || (authUser.id.includes('@') ? authUser.id : null);
+
+                    const { data: actualLegacy } = await window.supabaseClient
+                        .from('app_users')
+                        .select('*')
+                        .eq('email', targetEmail)
+                        .maybeSingle();
+
+                    if (actualLegacy) {
+                        console.log("Vinculando cuenta legacy con nuevo sistema de Auth...");
+                        // Actualizamos el ID antiguo por el nuevo ID de Auth para unificar
+                        const { data: updatedUser, error: linkError } = await window.supabaseClient
+                            .from('app_users')
+                            .update({ id: authUser.id })
+                            .eq('email', targetEmail)
+                            .select()
+                            .single();
+
+                        if (linkError) throw linkError;
+                        userData = updatedUser;
+                    }
+                }
+
+                // 3. Si aún no existe (Usuario totalmente nuevo)
+                if (!userData) {
+                    console.log("Creando nuevo registro de usuario...");
                     const trialDate = new Date();
                     trialDate.setDate(trialDate.getDate() + 3);
 
@@ -378,19 +410,17 @@
                     }]).select().single();
 
                     if (insError) throw insError;
-                    window.updateUI(newUser);
-                } else {
-                    window.updateUI(userData);
+                    userData = newUser;
                 }
+
+                window.updateUI(userData);
             } catch (err) {
-                console.error("Error crítico de sincronización:", err.message);
+                console.error("Error de sincronización:", err.message);
                 Swal.fire({
                     icon: 'error',
                     title: 'Error de Sincronización',
-                    text: 'No pudimos obtener tus datos. Intenta recargar la página.',
-                    background: '#0f0f0f',
-                    color: '#fff',
-                    confirmButtonColor: '#E50914'
+                    text: 'Hubo un problema al vincular tu cuenta: ' + err.message,
+                    background: '#0f0f0f', color: '#fff', confirmButtonColor: '#E50914'
                 });
             }
         }

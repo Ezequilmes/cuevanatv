@@ -319,26 +319,28 @@
         </div>
     </div>
 
-    <!-- CÓDIGO JS TOTALMENTE REESTRUCTURADO PARA EVITAR CONFLICTOS DE ÁMBITO (SCOPE) -->
+    <!-- CÓDIGO JS OPTIMIZADO (RESILIENTE) -->
     <script>
         // CONFIGURACIÓN GLOBAL
         const SUPABASE_URL = "https://hflcacrgwxszejlkcxsh.supabase.co";
         const SUPABASE_ANON_KEY = "sb_publishable_JmQBsLcvMBc-vFn0-lAXIg_3pQLaip7";
         const MP_PUBLIC_KEY = "APP_USR-f349d97a-9769-42b7-8321-7290076a5992";
 
-        // Inicialización de Clientes expuestos explícitamente en `window` para evitar bloqueos por inyecciones de extensiones
+        // Inicialización de Clientes
         window.supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-        window.mp = new MercadoPago(MP_PUBLIC_KEY, { locale: 'es-AR' });
+        window.mp = null; // Inicialización Lazy en DOMContentLoaded
 
         window.currentUser = null;
         window.currentMode = 'login';
 
         // --- GESTIÓN DE SESIÓN PERSISTENTE ---
         window.checkSession = async function() {
-            const { data: { session } } = await window.supabaseClient.auth.getSession();
-            if (session) {
-                await window.syncUserData(session.user);
-            }
+            try {
+                const { data: { session } } = await window.supabaseClient.auth.getSession();
+                if (session) {
+                    await window.syncUserData(session.user);
+                }
+            } catch (e) { console.error("Error checkSession:", e); }
         }
 
         // Escuchar cambios de estado en tiempo real
@@ -363,16 +365,21 @@
                     .single();
 
                 if (error || !userData) {
-                    throw new Error("No se pudo recuperar el perfil vinculado. Contacta a soporte.");
+                    console.warn("Perfil app_users no encontrado inmediatamente, reintentando...");
+                    // Pequeño delay por latencia de trigger
+                    await new Promise(r => setTimeout(r, 1000));
+                    const retry = await window.supabaseClient.from('app_users').select('*').eq('id', authUser.id).single();
+                    if (retry.data) userData = retry.data;
+                    else throw new Error("No se pudo recuperar el perfil vinculado. Contacta a soporte.");
                 }
 
                 window.updateUI(userData);
             } catch (err) {
-                console.error("Error de sincronización:", err.message);
+                console.error("Error de sincronización:", err);
                 Swal.fire({
                     icon: 'error',
                     title: 'Error de Perfil',
-                    text: err.message,
+                    text: err.message || "Error al cargar tus datos.",
                     background: '#0f0f0f', color: '#fff', confirmButtonColor: '#E50914'
                 });
             }
@@ -389,29 +396,36 @@
             if (error && (error.message.includes('Invalid login credentials') || error.status === 400)) {
                 console.log("Detectado posible usuario antiguo. Iniciando migración vía Trigger...");
 
-                const { data: legacyUser } = await window.supabaseClient
-                    .from('app_users')
-                    .select('email')
-                    .eq('email', email)
-                    .eq('password', password) // Validamos clave legacy
-                    .maybeSingle();
+                try {
+                    const { data: legacyUser } = await window.supabaseClient
+                        .from('app_users')
+                        .select('email')
+                        .eq('email', email)
+                        .eq('password', password) // Validamos clave legacy
+                        .maybeSingle();
 
-                if (legacyUser) {
-                    console.log("Usuario verificado. Creando cuenta Auth...");
-                    // Al llamar a signUp, el TRIGGER 'handle_new_user' hará el ON CONFLICT en la DB
-                    const { error: signUpError } = await window.supabaseClient.auth.signUp({
-                        email: email, password: password
-                    });
+                    if (legacyUser) {
+                        console.log("Usuario verificado. Creando cuenta Auth...");
+                        const { data: signUpData, error: signUpError } = await window.supabaseClient.auth.signUp({
+                            email: email, password: password
+                        });
 
-                    if (signUpError) throw signUpError;
+                        if (signUpError) {
+                            console.error("Fallo signUp en migración:", signUpError);
+                            throw signUpError;
+                        }
 
-                    // Login final tras migración exitosa
-                    const retry = await window.supabaseClient.auth.signInWithPassword({
-                        email: email, password: password
-                    });
+                        // Login final tras migración exitosa
+                        const retry = await window.supabaseClient.auth.signInWithPassword({
+                            email: email, password: password
+                        });
 
-                    if (retry.error) throw retry.error;
-                    return retry.data.user;
+                        if (retry.error) throw retry.error;
+                        return retry.data.user;
+                    }
+                } catch (migrationErr) {
+                    console.error("Error en flujo de migración:", migrationErr);
+                    throw migrationErr;
                 }
             }
 
@@ -431,6 +445,7 @@
         // --- INTEGRACIÓN MERCADOPAGO V2 ---
         window.initMercadoPago = async function() {
             if (!window.currentUser) return Swal.fire('Error', 'Debes iniciar sesión para pagar.', 'error');
+            if (!window.mp) return Swal.fire('Error', 'MercadoPago no cargó correctamente. Recarga la página.', 'warning');
 
             const btn = document.getElementById('checkout-btn');
             const originalContent = btn.innerHTML;
@@ -439,7 +454,6 @@
             btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Procesando...';
 
             try {
-                // Llamada a la Edge Function de Supabase
                 const response = await fetch(`${SUPABASE_URL}/functions/v1/create-preference`, {
                     method: 'POST',
                     headers: {
@@ -456,7 +470,6 @@
                 const data = await response.json();
                 if (data.error || !data.preferenceId) throw new Error(data.error || "No se pudo generar el pago.");
 
-                // Abrir checkout de MercadoPago
                 window.mp.checkout({
                     preference: { id: data.preferenceId },
                     autoOpen: true
@@ -471,7 +484,7 @@
 
             } catch (err) {
                 console.error("Error MP:", err);
-                Swal.fire('Error', 'Fallo al conectar con MercadoPago: ' + err.message, 'error');
+                Swal.fire('Error', 'Fallo al conectar con MercadoPago: ' + (err.message || "Desconocido"), 'error');
             } finally {
                 btn.disabled = false;
                 btn.innerHTML = originalContent;
@@ -480,7 +493,7 @@
 
         // --- PANEL DE ADMINISTRACIÓN ROBUSTO ---
         window.openAdminPanel = async function() {
-            const adminEmail = 'mazzera@hot.com'; // O el email que definas como admin
+            const adminEmail = 'mazzera@hot.com';
             if (!window.currentUser || window.currentUser.email !== adminEmail) return;
             
             const tbody = document.getElementById('admin-user-list');
@@ -488,54 +501,54 @@
             
             document.getElementById('admin-modal').classList.replace('hidden', 'flex');
 
-            const { data: users, error } = await window.supabaseClient
-                .from('app_users')
-                .select('*')
-                .order('created_at', { ascending: false });
+            try {
+                const { data: users, error } = await window.supabaseClient
+                    .from('app_users')
+                    .select('*')
+                    .order('created_at', { ascending: false });
 
-            if (error) {
-                tbody.innerHTML = `<tr><td colspan="4" class="text-center py-4 text-netflix">Error: ${error.message}</td></tr>`;
-                return;
+                if (error) throw error;
+
+                tbody.innerHTML = users.map(u => `
+                    <tr class="border-b border-white/5 hover:bg-white/5 transition-colors">
+                        <td class="py-4 px-4">
+                            <div class="font-bold text-white">${u.email}</div>
+                            <div class="text-[10px] text-gray-500 font-mono">${u.id.substring(0,8)}...</div>
+                        </td>
+                        <td class="py-4 px-4">
+                            <div class="text-white font-black">${u.days_remaining || 0} DÍAS</div>
+                            <div class="text-[10px] text-gray-500">${u.active ? 'ACTIVO' : 'VENCIDO'}</div>
+                        </td>
+                        <td class="py-4 px-4">
+                            <span class="px-2 py-1 rounded-full text-[10px] font-black uppercase ${u.active ? 'bg-green-500/20 text-green-400' : 'bg-netflix/20 text-netflix'}">
+                                ${u.active ? 'Premium' : 'Inactivo'}
+                            </span>
+                        </td>
+                        <td class="py-4 px-4 text-right space-x-2">
+                            <button onclick="window.quickAddDays('${u.id}', 30)" class="bg-green-600 hover:bg-green-700 text-white px-2 py-1 rounded text-[10px] font-bold" title="+30 Días">+30d</button>
+                            <button onclick="window.quickBlockUser('${u.id}')" class="bg-netflix hover:bg-red-800 text-white px-2 py-1 rounded text-[10px] font-bold" title="Bloquear"><i class="fas fa-ban"></i></button>
+                        </td>
+                    </tr>
+                `).join('');
+            } catch (e) {
+                tbody.innerHTML = `<tr><td colspan="4" class="text-center py-4 text-netflix">Error: ${e.message}</td></tr>`;
             }
-
-            tbody.innerHTML = users.map(u => `
-                <tr class="border-b border-white/5 hover:bg-white/5 transition-colors">
-                    <td class="py-4 px-4">
-                        <div class="font-bold text-white">${u.email}</div>
-                        <div class="text-[10px] text-gray-500 font-mono">${u.id.substring(0,8)}...</div>
-                    </td>
-                    <td class="py-4 px-4">
-                        <div class="text-white font-black">${u.days_remaining || 0} DÍAS</div>
-                        <div class="text-[10px] text-gray-500">${u.active ? 'ACTIVO' : 'VENCIDO'}</div>
-                    </td>
-                    <td class="py-4 px-4">
-                        <span class="px-2 py-1 rounded-full text-[10px] font-black uppercase ${u.active ? 'bg-green-500/20 text-green-400' : 'bg-netflix/20 text-netflix'}">
-                            ${u.active ? 'Premium' : 'Inactivo'}
-                        </span>
-                    </td>
-                    <td class="py-4 px-4 text-right space-x-2">
-                        <button onclick="window.quickAddDays('${u.id}', 30)" class="bg-green-600 hover:bg-green-700 text-white px-2 py-1 rounded text-[10px] font-bold" title="+30 Días">+30d</button>
-                        <button onclick="window.quickBlockUser('${u.id}')" class="bg-netflix hover:bg-red-800 text-white px-2 py-1 rounded text-[10px] font-bold" title="Bloquear"><i class="fas fa-ban"></i></button>
-                    </td>
-                </tr>
-            `).join('');
         }
 
         window.quickAddDays = async function(userId, days) {
-            const { data: user } = await window.supabaseClient.from('app_users').select('days_remaining').eq('id', userId).single();
-            const newTotal = (user?.days_remaining || 0) + days;
+            try {
+                const { data: user } = await window.supabaseClient.from('app_users').select('days_remaining').eq('id', userId).single();
+                const newTotal = (user?.days_remaining || 0) + days;
 
-            const { error } = await window.supabaseClient
-                .from('app_users')
-                .update({ days_remaining: newTotal, active: true, updated_at: new Date().toISOString() })
-                .eq('id', userId);
+                const { error } = await window.supabaseClient
+                    .from('app_users')
+                    .update({ days_remaining: newTotal, active: true, updated_at: new Date().toISOString() })
+                    .eq('id', userId);
 
-            if (error) {
-                Swal.fire('Error', error.message, 'error');
-            } else {
+                if (error) throw error;
                 Swal.fire('¡Éxito!', `Se añadieron ${days} días.`, 'success');
                 window.openAdminPanel();
-            }
+            } catch (e) { Swal.fire('Error', e.message, 'error'); }
         }
 
         window.quickBlockUser = async function(userId) {
@@ -550,12 +563,14 @@
             });
 
             if (confirm.isConfirmed) {
-                const { error } = await window.supabaseClient
-                    .from('app_users')
-                    .update({ active: false, days_remaining: 0, updated_at: new Date().toISOString() })
-                    .eq('id', userId);
-
-                if (!error) window.openAdminPanel();
+                try {
+                    const { error } = await window.supabaseClient
+                        .from('app_users')
+                        .update({ active: false, days_remaining: 0, updated_at: new Date().toISOString() })
+                        .eq('id', userId);
+                    if (error) throw error;
+                    window.openAdminPanel();
+                } catch (e) { Swal.fire('Error', e.message, 'error'); }
             }
         }
 
@@ -579,8 +594,16 @@
             }
         }
 
-        // Event listener para el formulario
+        // Event listener para el formulario e inicialización de SDKs
         document.addEventListener('DOMContentLoaded', () => {
+            // Inicialización Lazy de MercadoPago
+            try {
+                if (typeof MercadoPago !== 'undefined') {
+                    window.mp = new MercadoPago(MP_PUBLIC_KEY, { locale: 'es-AR' });
+                    console.log("✅ MercadoPago SDK inicializado.");
+                }
+            } catch (e) { console.error("Fallo al iniciar MercadoPago:", e); }
+
             const authForm = document.getElementById('auth-form');
             if (authForm) {
                 authForm.addEventListener('submit', async (e) => {
@@ -609,10 +632,11 @@
                             });
                         }
                     } catch (error) {
+                        const errMsg = error.message || (typeof error === 'string' ? error : JSON.stringify(error));
                         Swal.fire({
                             icon: 'error',
-                            title: 'Error',
-                            text: error.message,
+                            title: 'Error de Acceso',
+                            text: errMsg,
                             background: '#0f0f0f', color: '#fff', confirmButtonColor: '#E50914'
                         });
                     } finally {
@@ -625,6 +649,71 @@
             // Chequear sesión al iniciar
             window.checkSession();
         });
+
+        window.handleLogout = function() {
+            window.supabaseClient.auth.signOut();
+            window.closeModal('dashboard-modal');
+        }
+
+        window.openDashboard = function() {
+            if (!window.currentUser) return;
+            document.getElementById('dash-email').innerText = window.currentUser.email;
+            const statusBadge = document.getElementById('dash-status-badge');
+            const daysText = document.getElementById('dash-days');
+
+            if (window.currentUser.active) {
+                statusBadge.innerText = "Premium";
+                statusBadge.className = "inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black uppercase bg-green-500/20 text-green-400 animate__animated animate__fadeIn";
+                daysText.innerText = window.currentUser.days_remaining || "0";
+                document.getElementById('active-service-msg').classList.remove('hidden');
+                document.getElementById('payment-section').classList.add('hidden');
+            } else {
+                statusBadge.innerText = "Vencido";
+                statusBadge.className = "inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black uppercase bg-netflix/20 text-netflix";
+                daysText.innerText = "0";
+                document.getElementById('active-service-msg').classList.add('hidden');
+                document.getElementById('payment-section').classList.remove('hidden');
+            }
+
+            document.getElementById('dashboard-modal').classList.replace('hidden', 'flex');
+        }
+
+        window.openAuthModal = function(mode = 'login') {
+            window.currentMode = mode;
+            window.updateAuthModalUI();
+            const modal = document.getElementById('auth-modal');
+            modal.classList.replace('hidden', 'flex');
+        }
+
+        window.updateAuthModalUI = function() {
+            const title = document.getElementById('auth-title');
+            const subtitle = document.getElementById('auth-subtitle');
+            const submitBtn = document.getElementById('auth-submit-btn');
+            const toggleText = document.getElementById('auth-toggle-text');
+
+            if (window.currentMode === 'login') {
+                title.innerText = 'Iniciar Sesión';
+                subtitle.innerText = 'Accede a tu contenido premium';
+                submitBtn.innerText = 'Entrar ahora';
+                toggleText.innerHTML = '¿No tienes cuenta? <button onclick="window.toggleAuthMode()" class="text-white font-bold hover:underline">Regístrate gratis</button>';
+            } else {
+                title.innerText = 'Crear Cuenta';
+                subtitle.innerText = 'Empieza tu prueba de 3 días gratis';
+                submitBtn.innerText = 'Registrarme';
+                toggleText.innerHTML = '¿Ya tienes cuenta? <button onclick="window.toggleAuthMode()" class="text-white font-bold hover:underline">Inicia sesión</button>';
+            }
+        }
+
+        window.toggleAuthMode = function() {
+            window.currentMode = window.currentMode === 'login' ? 'signup' : 'login';
+            window.updateAuthModalUI();
+        }
+
+        window.closeModal = function(id) {
+            const modal = document.getElementById(id);
+            if (modal) modal.classList.replace('flex', 'hidden');
+        }
+    </script>
 
         window.handleLogout = function() {
             window.supabaseClient.auth.signOut();

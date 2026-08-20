@@ -117,6 +117,9 @@
             <form id="auth-form" class="space-y-4">
                 <input type="email" id="auth-email" required class="w-full bg-black/50 border border-white/10 rounded-2xl px-5 py-4 text-white focus:border-netflix outline-none" placeholder="tu@email.com">
                 <input type="password" id="auth-password" required class="w-full bg-black/50 border border-white/10 rounded-2xl px-5 py-4 text-white focus:border-netflix outline-none" placeholder="Contraseña">
+                <div id="whatsapp-field-container" class="hidden">
+                    <input type="text" id="auth-whatsapp" class="w-full bg-black/50 border border-white/10 rounded-2xl px-5 py-4 text-white focus:border-netflix outline-none" placeholder="WhatsApp (Ej: 113506...)">
+                </div>
                 <button type="submit" id="auth-submit-btn" class="w-full bg-netflix text-white font-bold py-4 rounded-2xl shadow-lg mt-4">Entrar ahora</button>
             </form>
             <div class="mt-8 text-center border-t border-white/5 pt-6">
@@ -181,200 +184,272 @@
         const MP_PUBLIC_KEY = "APP_USR-f349d97a-9769-42b7-8321-7290076a5992";
 
         window.supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-        window.mp = null; // Inicialización Lazy
+        window.mp = null;
         window.currentUser = null;
         window.currentMode = 'login';
 
-        // --- CORE: SINCRONIZACIÓN DE USUARIOS ---
-        window.checkSession = async function() {
-            try {
-                const { data: { session } } = await window.supabaseClient.auth.getSession();
-                if (session) await window.syncUserData(session.user);
-            } catch (e) { console.error("Session Error:", e); }
-        }
-
-        window.syncUserData = async function(authUser) {
-            const badge = document.getElementById('dash-status-badge');
-            if(badge) badge.innerText = "Sincronizando...";
-            try {
-                // Buscamos directamente por ID. El Trigger handle_new_user ya garantizó la vinculación.
-                let { data: userData, error } = await window.supabaseClient.from('app_users').select('*').eq('id', authUser.id).single();
-                if (error || !userData) {
-                    console.warn("Retraso en trigger detectado, reintentando...");
-                    await new Promise(r => setTimeout(r, 1000));
-                    const retry = await window.supabaseClient.from('app_users').select('*').eq('id', authUser.id).single();
-                    if (retry.data) userData = retry.data;
-                    else throw new Error("No pudimos cargar tu perfil. Contacta a soporte.");
-                }
-                window.updateUI(userData);
-            } catch (err) {
-                Swal.fire({ icon: 'error', title: 'Error de Perfil', text: err.message, background: '#0f0f0f', color: '#fff' });
-            }
-        }
-
-        // --- LÓGICA DE AUTENTICACIÓN Y MIGRACIÓN ---
-        window.login = async function(email, password) {
-            let { data, error } = await window.supabaseClient.auth.signInWithPassword({ email, password });
-
-            // Si el login falla, verificamos si es un usuario antiguo de la APK para migrarlo
-            if (error && (error.message.includes('Invalid login credentials') || error.status === 400)) {
-                console.log("Iniciando auto-migración de usuario antiguo...");
-                const { data: legacyUser } = await window.supabaseClient.from('app_users').select('email').eq('email', email).eq('password', password).maybeSingle();
-
-                if (legacyUser) {
-                    console.log("Migrando vía Trigger...");
-                    const { error: signUpError } = await window.supabaseClient.auth.signUp({ email, password });
-                    if (signUpError) throw signUpError;
-                    const retry = await window.supabaseClient.auth.signInWithPassword({ email, password });
-                    if (retry.error) throw retry.error;
-                    return retry.data.user;
-                }
-            }
-            if (error) throw error;
-            return data.user;
-        }
-
-        window.register = async function(email, password) {
-            const { data, error } = await window.supabaseClient.auth.signUp({ email, password });
-            if (error) throw error;
-            return data.user;
-        }
-
-        // --- MERCADOPAGO ---
-        window.initMercadoPago = async function() {
-            if (!window.currentUser) return;
-            if (!window.mp) return Swal.fire('Error', 'El sistema de pagos no cargó. Recarga la página.', 'warning');
-            const btn = document.getElementById('checkout-btn');
-            const originalContent = btn.innerHTML;
-            btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Procesando...';
-            try {
-                const response = await fetch(`${SUPABASE_URL}/functions/v1/create-preference`, {
-                    method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` },
-                    body: JSON.stringify({ email: window.currentUser.email, title: "Abono CuevanaTV", price: 3000 })
-                });
-                const data = await response.json();
-                if (data.error || !data.preferenceId) throw new Error(data.error || "No se generó el ID de pago.");
-                window.mp.checkout({ preference: { id: data.preferenceId }, autoOpen: true });
-                Swal.fire({ title: 'Ventana de pago abierta', text: 'Tus días se activarán automáticamente al finalizar.', icon: 'info', background: '#0f0f0f', color: '#fff' });
-            } catch (err) { Swal.fire('Error', 'Fallo conexión: ' + err.message, 'error'); }
-            finally { btn.disabled = false; btn.innerHTML = originalContent; }
-        }
-
-        // --- PANEL ADMIN ---
-        window.openAdminPanel = async function() {
-            if (!window.currentUser || window.currentUser.email !== 'mazzera@hot.com') return;
-            const tbody = document.getElementById('admin-user-list');
-            tbody.innerHTML = '<tr><td colspan="4" class="text-center py-8"><i class="fas fa-spinner fa-spin fa-2x text-amber-500"></i></td></tr>';
-            document.getElementById('admin-modal').classList.replace('hidden', 'flex');
-            try {
-                const { data: users, error } = await window.supabaseClient.from('app_users').select('*').order('created_at', { ascending: false });
-                if (error) throw error;
-                tbody.innerHTML = users.map(u => `
-                    <tr class="border-b border-white/5 hover:bg-white/5 transition-colors">
-                        <td class="py-4 px-4 font-bold text-white">${u.email}</td>
-                        <td class="py-4 px-4 text-white font-black">${u.days_remaining || 0}d</td>
-                        <td class="py-4 px-4"><span class="px-2 py-1 rounded-full text-[10px] font-black uppercase ${u.active ? 'bg-green-500/20 text-green-400' : 'bg-netflix/20 text-netflix'}">${u.active ? 'Premium' : 'Inactivo'}</span></td>
-                        <td class="py-4 px-4 text-right space-x-2">
-                            <button onclick="window.quickAddDays('${u.id}', 30)" class="bg-green-600 text-white px-2 py-1 rounded text-[10px] font-bold">+30d</button>
-                            <button onclick="window.quickBlockUser('${u.id}')" class="bg-netflix text-white px-2 py-1 rounded text-[10px] font-bold"><i class="fas fa-ban"></i></button>
-                        </td>
-                    </tr>
-                `).join('');
-            } catch (e) { tbody.innerHTML = `<tr><td colspan="4" class="text-center py-4 text-netflix">Error: ${e.message}</td></tr>`; }
-        }
-
-        window.quickAddDays = async function(userId, days) {
-            try {
-                const { data: user } = await window.supabaseClient.from('app_users').select('days_remaining').eq('id', userId).single();
-                const newTotal = (user?.days_remaining || 0) + days;
-                const { error } = await window.supabaseClient.from('app_users').update({ days_remaining: newTotal, active: true, updated_at: new Date().toISOString() }).eq('id', userId);
-                if (error) throw error; Swal.fire('¡Éxito!', `Añadidos ${days} días.`, 'success'); window.openAdminPanel();
-            } catch (e) { Swal.fire('Error', e.message, 'error'); }
-        }
-
-        window.quickBlockUser = async function(userId) {
-            const result = await Swal.fire({ title: '¿Bloquear?', text: "Se quitará el acceso premium.", icon: 'warning', showCancelButton: true, confirmButtonColor: '#E50914', background: '#0f0f0f', color: '#fff' });
-            if (result.isConfirmed) {
+        // --- GESTIÓN DE SESIÓN LOCAL (DIRECTA DE APP_USERS) ---
+        window.checkSession = function() {
+            const savedUser = localStorage.getItem('cuevana_user');
+            if (savedUser) {
                 try {
-                    const { error } = await window.supabaseClient.from('app_users').update({ active: false, days_remaining: 0, updated_at: new Date().toISOString() }).eq('id', userId);
-                    if (error) throw error; window.openAdminPanel();
-                } catch (e) { Swal.fire('Error', e.message, 'error'); }
+                    window.currentUser = JSON.parse(savedUser);
+                    window.refreshUserData(window.currentUser.email);
+                } catch (e) {
+                    localStorage.removeItem('cuevana_user');
+                }
             }
-        }
+        };
+
+        window.refreshUserData = async function(email) {
+            try {
+                const { data: user, error } = await window.supabaseClient
+                    .from('app_users')
+                    .select('*')
+                    .eq('email', email)
+                    .maybeSingle();
+
+                if (user) {
+                    window.currentUser = user;
+                    localStorage.setItem('cuevana_user', JSON.stringify(user));
+                    window.updateUI(user);
+                }
+            } catch (e) {
+                console.error("Error al actualizar usuario:", e);
+            }
+        };
+
+        // --- REGISTRO DIRECTO EN APP_USERS ---
+        window.register = async function(email, password, whatsapp) {
+            // 1. Verificar si el email ya existe
+            const { data: existing } = await window.supabaseClient
+                .from('app_users')
+                .select('id')
+                .eq('email', email)
+                .maybeSingle();
+
+            if (existing) {
+                throw new Error("Este correo electrónico ya se encuentra registrado.");
+            }
+
+            // 2. Calcular 3 días de prueba
+            const trialDate = new Date();
+            trialDate.setDate(trialDate.getDate() + 3);
+
+            // 3. Insertar usuario con la misma estructura que la APK
+            const { data: newUser, error } = await window.supabaseClient
+                .from('app_users')
+                .insert([{
+                    email: email,
+                    password: password,
+                    whatsapp: whatsapp || "",
+                    active: true,
+                    days_remaining: 3,
+                    fecha_vencimiento: trialDate.toISOString(),
+                    limite_pantallas: 2,
+                    role: 'user',
+                    bot_step: 'nuevo',
+                    bypass_qr: false
+                }])
+                .select()
+                .single();
+
+            if (error) throw error;
+
+            window.currentUser = newUser;
+            localStorage.setItem('cuevana_user', JSON.stringify(newUser));
+            window.updateUI(newUser);
+            return newUser;
+        };
+
+        // --- LOGIN DIRECTO CONTRA APP_USERS ---
+        window.login = async function(email, password) {
+            const { data: user, error } = await window.supabaseClient
+                .from('app_users')
+                .select('*')
+                .eq('email', email)
+                .eq('password', password)
+                .maybeSingle();
+
+            if (error) throw error;
+            if (!user) {
+                throw new Error("Correo o contraseña incorrectos.");
+            }
+
+            window.currentUser = user;
+            localStorage.setItem('cuevana_user', JSON.stringify(user));
+            window.updateUI(user);
+            return user;
+        };
+
+        // --- CIERRE DE SESIÓN ---
+        window.handleLogout = function() {
+            localStorage.removeItem('cuevana_user');
+            window.currentUser = null;
+            window.updateUI(null);
+            window.closeModal('dashboard-modal');
+        };
 
         // --- UI CORE ---
         window.updateUI = function(user) {
-            window.currentUser = user;
             const authBtns = document.getElementById('auth-buttons');
             const userMenu = document.getElementById('user-menu');
             const navEmail = document.getElementById('nav-user-email');
             const adminBtn = document.getElementById('admin-btn');
+
             if (user) {
-                authBtns.classList.add('hidden'); userMenu.classList.remove('hidden');
-                navEmail.innerText = user.email; if (user.email === 'mazzera@hot.com') adminBtn.classList.remove('hidden');
+                authBtns.classList.add('hidden');
+                userMenu.classList.remove('hidden');
+                navEmail.innerText = user.email;
+                if (user.email === 'mazzera@hot.com' || user.role === 'admin') {
+                    adminBtn.classList.remove('hidden');
+                } else {
+                    adminBtn.classList.add('hidden');
+                }
             } else {
-                authBtns.classList.remove('hidden'); userMenu.classList.add('hidden'); adminBtn.classList.add('hidden');
+                authBtns.classList.remove('hidden');
+                userMenu.classList.add('hidden');
+                adminBtn.classList.add('hidden');
             }
-        }
+        };
 
-        document.addEventListener('DOMContentLoaded', () => {
-            try {
-                if (typeof MercadoPago !== 'undefined') { window.mp = new MercadoPago(MP_PUBLIC_KEY, { locale: 'es-AR' }); }
-            } catch (e) { console.error("MP Load Error:", e); }
-
-            const authForm = document.getElementById('auth-form');
-            if (authForm) {
-                authForm.addEventListener('submit', async (e) => {
-                    e.preventDefault();
-                    const email = document.getElementById('auth-email').value;
-                    const password = document.getElementById('auth-password').value;
-                    const btn = document.getElementById('auth-submit-btn');
-                    const originalText = btn.innerText;
-                    btn.disabled = true; btn.innerHTML = `<i class="fas fa-spinner fa-spin mr-2"></i> Procesando...`;
-                    try {
-                        if (window.currentMode === 'login') await window.login(email, password);
-                        else await window.register(email, password);
-                        window.closeModal('auth-modal');
-                        if (window.currentMode === 'signup') Swal.fire({ icon: 'success', title: '¡Bienvenido!', text: 'Ya tienes tus 3 días de prueba gratis.', background: '#0f0f0f', color: '#fff' });
-                    } catch (error) {
-                        const errMsg = error.message || (typeof error === 'string' ? error : JSON.stringify(error));
-                        Swal.fire({ icon: 'error', title: 'Error', text: errMsg, background: '#0f0f0f', color: '#fff' });
-                    } finally { btn.disabled = false; btn.innerText = originalText; }
-                });
-            }
-            window.checkSession();
-        });
-
-        window.handleLogout = function() { window.supabaseClient.auth.signOut(); window.closeModal('dashboard-modal'); }
         window.openDashboard = function() {
             if (!window.currentUser) return;
             document.getElementById('dash-email').innerText = window.currentUser.email;
             const badge = document.getElementById('dash-status-badge');
             const days = document.getElementById('dash-days');
+
             if (window.currentUser.active) {
-                badge.innerText = "Premium"; badge.className = "inline-flex px-3 py-1 rounded-full text-[10px] font-black uppercase bg-green-500/20 text-green-400";
+                badge.innerText = "Activo";
+                badge.className = "inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black uppercase bg-green-500/20 text-green-400";
                 days.innerText = window.currentUser.days_remaining || "0";
-                document.getElementById('active-service-msg').classList.remove('hidden'); document.getElementById('payment-section').classList.add('hidden');
+                document.getElementById('active-service-msg').classList.remove('hidden');
+                document.getElementById('payment-section').classList.add('hidden');
             } else {
-                badge.innerText = "Vencido"; badge.className = "inline-flex px-3 py-1 rounded-full text-[10px] font-black uppercase bg-netflix/20 text-netflix";
+                badge.innerText = "Vencido";
+                badge.className = "inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black uppercase bg-netflix/20 text-netflix";
                 days.innerText = "0";
-                document.getElementById('active-service-msg').classList.add('hidden'); document.getElementById('payment-section').classList.remove('hidden');
+                document.getElementById('active-service-msg').classList.add('hidden');
+                document.getElementById('payment-section').classList.remove('hidden');
             }
+
             document.getElementById('dashboard-modal').classList.replace('hidden', 'flex');
-        }
-        window.openAuthModal = function(mode = 'login') { window.currentMode = mode; window.updateAuthModalUI(); document.getElementById('auth-modal').classList.replace('hidden', 'flex'); }
+        };
+
+        window.openAuthModal = function(mode = 'login') {
+            window.currentMode = mode;
+            window.updateAuthModalUI();
+            document.getElementById('auth-modal').classList.replace('hidden', 'flex');
+        };
+
         window.updateAuthModalUI = function() {
-            const title = document.getElementById('auth-title'); const subtitle = document.getElementById('auth-subtitle'); const submitBtn = document.getElementById('auth-submit-btn'); const toggleText = document.getElementById('auth-toggle-text');
+            const title = document.getElementById('auth-title');
+            const subtitle = document.getElementById('auth-subtitle');
+            const submitBtn = document.getElementById('auth-submit-btn');
+            const toggleText = document.getElementById('auth-toggle-text');
+            const waContainer = document.getElementById('whatsapp-field-container');
+            const waInput = document.getElementById('auth-whatsapp');
+
             if (window.currentMode === 'login') {
-                title.innerText = 'Iniciar Sesión'; subtitle.innerText = 'Accede a tu contenido premium'; submitBtn.innerText = 'Entrar ahora';
+                title.innerText = 'Iniciar Sesión';
+                subtitle.innerText = 'Accede a tu contenido premium';
+                submitBtn.innerText = 'Entrar ahora';
                 toggleText.innerHTML = '¿No tienes cuenta? <button onclick="window.toggleAuthMode()" class="text-white font-bold hover:underline">Regístrate gratis</button>';
+                waContainer.classList.add('hidden');
+                waInput.removeAttribute('required');
             } else {
-                title.innerText = 'Crear Cuenta'; subtitle.innerText = 'Empieza tu prueba de 3 días gratis'; submitBtn.innerText = 'Registrarme';
+                title.innerText = 'Crear Cuenta';
+                subtitle.innerText = 'Empieza tu prueba de 3 días gratis';
+                submitBtn.innerText = 'Registrarme';
                 toggleText.innerHTML = '¿Ya tienes cuenta? <button onclick="window.toggleAuthMode()" class="text-white font-bold hover:underline">Inicia sesión</button>';
+                waContainer.classList.remove('hidden');
+                waInput.setAttribute('required', 'true');
             }
-        }
-        window.toggleAuthMode = function() { window.currentMode = window.currentMode === 'login' ? 'signup' : 'login'; window.updateAuthModalUI(); }
-        window.closeModal = function(id) { const modal = document.getElementById(id); if (modal) modal.classList.replace('flex', 'hidden'); }
+        };
+
+        window.toggleAuthMode = function() {
+            window.currentMode = window.currentMode === 'login' ? 'signup' : 'login';
+            window.updateAuthModalUI();
+        };
+
+        window.closeModal = function(id) {
+            const modal = document.getElementById(id);
+            if (modal) modal.classList.replace('flex', 'hidden');
+        };
+
+        // --- MERCADOPAGO ---
+        window.initMercadoPago = async function() {
+            if (!window.currentUser) return;
+            if (!window.mp) return Swal.fire('Error', 'El sistema de pagos no cargó. Recarga la página.', 'warning');
+
+            const btn = document.getElementById('checkout-btn');
+            const originalContent = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Procesando...';
+
+            try {
+                const response = await fetch(`${SUPABASE_URL}/functions/v1/create-preference`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` },
+                    body: JSON.stringify({ email: window.currentUser.email, title: "Abono CuevanaTV", price: 3000 })
+                });
+                const data = await response.json();
+                if (data.error || !data.preferenceId) throw new Error(data.error || "No se generó el ID de pago.");
+
+                window.mp.checkout({ preference: { id: data.preferenceId }, autoOpen: true });
+                Swal.fire({ title: 'Ventana de pago abierta', text: 'Tus días se activarán automáticamente al finalizar.', icon: 'info', background: '#0f0f0f', color: '#fff' });
+            } catch (err) {
+                Swal.fire('Error', 'Fallo de conexión: ' + err.message, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = originalContent;
+            }
+        };
+
+        // --- INICIALIZACIÓN ---
+        document.addEventListener('DOMContentLoaded', () => {
+            try {
+                if (typeof MercadoPago !== 'undefined') {
+                    window.mp = new MercadoPago(MP_PUBLIC_KEY, { locale: 'es-AR' });
+                }
+            } catch (e) {
+                console.error("Error al cargar MercadoPago:", e);
+            }
+
+            const authForm = document.getElementById('auth-form');
+            if (authForm) {
+                authForm.addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    const email = document.getElementById('auth-email').value.trim();
+                    const password = document.getElementById('auth-password').value;
+                    const whatsapp = document.getElementById('auth-whatsapp')?.value.trim();
+                    const btn = document.getElementById('auth-submit-btn');
+                    const originalText = btn.innerText;
+
+                    btn.disabled = true;
+                    btn.innerHTML = `<i class="fas fa-spinner fa-spin mr-2"></i> Procesando...`;
+
+                    try {
+                        if (window.currentMode === 'login') {
+                            await window.login(email, password);
+                        } else {
+                            await window.register(email, password, whatsapp);
+                        }
+                        window.closeModal('auth-modal');
+                        if (window.currentMode === 'signup') {
+                            Swal.fire({ icon: 'success', title: '¡Bienvenido!', text: 'Cuenta creada con 3 días de prueba gratis.', background: '#0f0f0f', color: '#fff' });
+                        }
+                    } catch (error) {
+                        Swal.fire({ icon: 'error', title: 'Error', text: error.message, background: '#0f0f0f', color: '#fff' });
+                    } finally {
+                        btn.disabled = false;
+                        btn.innerText = originalText;
+                    }
+                });
+            }
+
+            window.checkSession();
+        });
     </script>
 </body>
 </html>

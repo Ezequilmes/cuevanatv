@@ -355,62 +355,15 @@
             if(badge) badge.innerText = "Sincronizando...";
 
             try {
-                // 1. Primero intentamos buscar por ID (Vínculo oficial)
+                // Buscamos directamente por ID. El Trigger de Supabase ya garantizó la vinculación en app_users.
                 let { data: userData, error } = await window.supabaseClient
                     .from('app_users')
                     .select('*')
                     .eq('id', authUser.id)
-                    .maybeSingle();
+                    .single();
 
-                // 2. Si no existe por ID, lo buscamos por EMAIL (Migración de APK antigua)
-                if (!userData) {
-                    console.log("Usuario no encontrado por ID, buscando por Email...");
-                    const { data: legacyByEmail } = await window.supabaseClient
-                        .from('app_users')
-                        .select('*')
-                        .eq('email', authUser.id.includes('@') ? authUser.id : authUser.email) // Fallback seguro
-                        .maybeSingle();
-
-                    const targetEmail = authUser.email || (authUser.id.includes('@') ? authUser.id : null);
-
-                    const { data: actualLegacy } = await window.supabaseClient
-                        .from('app_users')
-                        .select('*')
-                        .eq('email', targetEmail)
-                        .maybeSingle();
-
-                    if (actualLegacy) {
-                        console.log("Vinculando cuenta legacy con nuevo sistema de Auth...");
-                        // Actualizamos el ID antiguo por el nuevo ID de Auth para unificar
-                        const { data: updatedUser, error: linkError } = await window.supabaseClient
-                            .from('app_users')
-                            .update({ id: authUser.id })
-                            .eq('email', targetEmail)
-                            .select()
-                            .single();
-
-                        if (linkError) throw linkError;
-                        userData = updatedUser;
-                    }
-                }
-
-                // 3. Si aún no existe (Usuario totalmente nuevo)
-                if (!userData) {
-                    console.log("Creando nuevo registro de usuario...");
-                    const trialDate = new Date();
-                    trialDate.setDate(trialDate.getDate() + 3);
-
-                    const { data: newUser, error: insError } = await window.supabaseClient.from('app_users').insert([{
-                        id: authUser.id,
-                        email: authUser.email,
-                        active: true,
-                        days_remaining: 3,
-                        fecha_vencimiento: trialDate.toISOString(),
-                        bot_step: 'nuevo'
-                    }]).select().single();
-
-                    if (insError) throw insError;
-                    userData = newUser;
+                if (error || !userData) {
+                    throw new Error("No se pudo recuperar el perfil vinculado. Contacta a soporte.");
                 }
 
                 window.updateUI(userData);
@@ -418,48 +371,43 @@
                 console.error("Error de sincronización:", err.message);
                 Swal.fire({
                     icon: 'error',
-                    title: 'Error de Sincronización',
-                    text: 'Hubo un problema al vincular tu cuenta: ' + err.message,
+                    title: 'Error de Perfil',
+                    text: err.message,
                     background: '#0f0f0f', color: '#fff', confirmButtonColor: '#E50914'
                 });
             }
         }
 
-        // --- AUTENTICACIÓN HÍBRIDA CON AUTO-MIGRACIÓN (SENIOR) ---
+        // --- AUTENTICACIÓN HÍBRIDA CON AUTO-MIGRACIÓN (DB-TRIGGER DRIVEN) ---
         window.login = async function(email, password) {
             // 1. Intentar login oficial en Supabase Auth
             let { data, error } = await window.supabaseClient.auth.signInWithPassword({
-                email: email,
-                password: password
+                email: email, password: password
             });
 
-            // 2. Si falla, verificar si es un usuario antiguo de la APK (Migración Crítica)
+            // 2. Si falla, verificar si es un usuario antiguo de la APK (Migración)
             if (error && (error.message.includes('Invalid login credentials') || error.status === 400)) {
-                console.log("Detectado posible usuario antiguo. Iniciando auto-migración...");
+                console.log("Detectado posible usuario antiguo. Iniciando migración vía Trigger...");
 
-                // Consultamos la tabla pública donde la APK guarda los datos
-                const { data: legacyUser, error: legacyError } = await window.supabaseClient
+                const { data: legacyUser } = await window.supabaseClient
                     .from('app_users')
-                    .select('*')
+                    .select('email')
                     .eq('email', email)
-                    .eq('password', password) // Buscamos coincidencia exacta de contraseña legacy
+                    .eq('password', password) // Validamos clave legacy
                     .maybeSingle();
 
                 if (legacyUser) {
-                    console.log("Usuario verificado en tabla legacy. Creando cuenta oficial...");
-
-                    // Creamos la cuenta en Auth usando los mismos datos
-                    const { data: signUpData, error: signUpError } = await window.supabaseClient.auth.signUp({
-                        email: email,
-                        password: password
+                    console.log("Usuario verificado. Creando cuenta Auth...");
+                    // Al llamar a signUp, el TRIGGER 'handle_new_user' hará el ON CONFLICT en la DB
+                    const { error: signUpError } = await window.supabaseClient.auth.signUp({
+                        email: email, password: password
                     });
 
                     if (signUpError) throw signUpError;
 
-                    // Re-intentamos el login inmediatamente
+                    // Login final tras migración exitosa
                     const retry = await window.supabaseClient.auth.signInWithPassword({
-                        email: email,
-                        password: password
+                        email: email, password: password
                     });
 
                     if (retry.error) throw retry.error;

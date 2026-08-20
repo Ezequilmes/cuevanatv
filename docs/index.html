@@ -304,19 +304,76 @@
             document.getElementById('dashboard-modal').classList.replace('hidden', 'flex');
         };
 
+        // --- MERCADOPAGO: REDIRECCIÓN DIRECTA (CERO ERRORES DE SDK) ---
         window.initPlanMP = async function(price, days, title) {
-            if (!window.currentUser) return;
-            if (!window.mp) return Swal.fire('Error', 'El sistema de pagos no cargó.', 'error');
-            Swal.fire({ title: 'Generando Orden', text: `Iniciando pago de ${title}...`, allowOutsideClick: false, didOpen: () => Swal.showLoading(), background: '#0f0f0f', color: '#fff' });
+            if (!window.currentUser) {
+                window.openAuthModal('login');
+                return;
+            }
+
+            Swal.fire({
+                title: 'Generando Orden de Pago',
+                text: `Conectando con MercadoPago para ${title}...`,
+                allowOutsideClick: false,
+                didOpen: () => Swal.showLoading(),
+                background: '#0f0f0f',
+                color: '#fff'
+            });
+
             try {
                 const response = await fetch(`${SUPABASE_URL}/functions/v1/create-preference`, {
-                    method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` },
-                    body: JSON.stringify({ email: window.currentUser.email, title: `CuevanaTV - ${title}`, price: price })
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+                    },
+                    body: JSON.stringify({
+                        email: window.currentUser.email,
+                        title: `CuevanaTV - ${title}`,
+                        price: price
+                    })
                 });
+
                 const data = await response.json();
-                if (data.error || !data.preferenceId) throw new Error(data.error || "No se generó el ID.");
-                Swal.close(); window.mp.checkout({ preference: { id: data.preferenceId }, autoOpen: true });
-            } catch (err) { Swal.fire('Error', 'Fallo conexión con MercadoPago.', 'error'); }
+
+                // Extraer la URL de redirección directa (init_point) o preferenceId
+                const checkoutUrl = data.init_point || data.initPoint || data.sandbox_init_point;
+
+                if (checkoutUrl) {
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Redirigiendo a MercadoPago',
+                        text: 'Te estamos llevando al portal seguro de pago...',
+                        timer: 1500,
+                        showConfirmButton: false,
+                        background: '#0f0f0f',
+                        color: '#fff'
+                    });
+                    setTimeout(() => {
+                        window.location.href = checkoutUrl;
+                    }, 1200);
+                    return;
+                }
+
+                // Fallback en caso de que la Edge Function solo devuelva el ID
+                if (data.preferenceId) {
+                    window.location.href = `https://www.mercadopago.com.ar/checkout/v1/redirect?pref_id=${data.preferenceId}`;
+                    return;
+                }
+
+                throw new Error(data.error || "No se pudo generar la orden de pago.");
+
+            } catch (err) {
+                console.error("Error MP:", err);
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Error de Pago',
+                    text: 'No se pudo conectar con MercadoPago. Intenta nuevamente.',
+                    background: '#0f0f0f',
+                    color: '#fff',
+                    confirmButtonColor: '#E50914'
+                });
+            }
         };
 
         window.copyDownloaderCode = function() {
@@ -389,8 +446,8 @@
         window.toggleAuthMode = function() { window.currentMode = window.currentMode === 'login' ? 'signup' : 'login'; window.updateAuthModalUI(); };
         window.closeModal = function(id) { const modal = document.getElementById(id); if (modal) modal.classList.replace('flex', 'hidden'); };
 
+        // --- INICIALIZACIÓN LIMPIA ---
         document.addEventListener('DOMContentLoaded', () => {
-            try { if (typeof MercadoPago !== 'undefined') { window.mp = new MercadoPago(MP_PUBLIC_KEY, { locale: 'es-AR' }); } } catch (e) {}
             const authForm = document.getElementById('auth-form');
             if (authForm) {
                 authForm.addEventListener('submit', async (e) => {
@@ -400,14 +457,37 @@
                     const whatsapp = document.getElementById('auth-whatsapp')?.value.trim();
                     const btn = document.getElementById('auth-submit-btn');
                     const originalText = btn.innerText;
-                    btn.disabled = true; btn.innerHTML = `<i class="fas fa-spinner fa-spin mr-2"></i> Procesando...`;
+                    btn.disabled = true;
+                    btn.innerHTML = `<i class="fas fa-spinner fa-spin mr-2"></i> Procesando...`;
+
                     try {
-                        if (window.currentMode === 'login') await window.login(email, password);
-                        else await window.register(email, password, whatsapp);
+                        if (window.currentMode === 'login') {
+                            await window.login(email, password);
+                        } else {
+                            await window.register(email, password, whatsapp);
+                        }
                         window.closeModal('auth-modal');
-                        if (window.currentMode === 'signup') Swal.fire({ icon: 'success', title: '¡Bienvenido!', text: 'Cuenta creada con 3 días de prueba gratis.', background: '#0f0f0f', color: '#fff' });
-                    } catch (error) { Swal.fire({ icon: 'error', title: 'Error', text: error.message, background: '#0f0f0f', color: '#fff' });
-                    } finally { btn.disabled = false; btn.innerText = originalText; }
+                        if (window.currentMode === 'signup') {
+                            Swal.fire({
+                                icon: 'success',
+                                title: '¡Bienvenido!',
+                                text: 'Cuenta creada con 3 días de prueba gratis.',
+                                background: '#0f0f0f',
+                                color: '#fff'
+                            });
+                        }
+                    } catch (error) {
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Error',
+                            text: error.message,
+                            background: '#0f0f0f',
+                            color: '#fff'
+                        });
+                    } finally {
+                        btn.disabled = false;
+                        btn.innerText = originalText;
+                    }
                 });
             }
             window.checkSession();
